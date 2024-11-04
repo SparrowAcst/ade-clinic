@@ -13,7 +13,8 @@ const {
     last,
     isUndefined,
     groupBy,
-    isString
+    isString,
+    unionBy
 } = require("lodash")
 const moment = require("moment")
 const path = require("path")
@@ -534,7 +535,7 @@ const syncExaminations = async (req, res) => {
             return
         }
 
-        console.log("--------------------------------< FB")
+        // console.log("--------------------------------< FB")
 
         let examinations_fb = await fb.getCollectionItems(
             "examinations",
@@ -543,12 +544,14 @@ const syncExaminations = async (req, res) => {
             ]
         )
 
-        console.log("--------------------------------> FB")
+        // console.log("--------------------------------> FB")
 
+        
         examinations_fb = examinations_fb.filter(e => grants.patientPrefix.map(p => e.patientId.startsWith(p)).reduce((a, b) => a || b, false))
 
+        // console.log("examinations_fb", examinations_fb)
 
-        console.log("--------------------------------< M1")
+        // console.log("--------------------------------< M1")
 
         let examinations_mg = await mongodb.aggregate({
             db: DB,
@@ -567,13 +570,17 @@ const syncExaminations = async (req, res) => {
             ]
         })
 
-        console.log("--------------------------------> M1")
+        // console.log("--------------------------------> M1")
 
 
         examinations_mg = examinations_mg.filter(e => grants.patientPrefix.map(p => e.examination.patientId.startsWith(p)).reduce((a, b) => a || b, false))
 
+        // console.log("examinations_mg", examinations_mg)
+
         let toBeAdded = difference(examinations_fb.map(d => d.patientId), examinations_mg.map(d => d.examination.patientId))
         let toBeLocked = difference(examinations_mg.map(d => d.examination.patientId), examinations_fb.map(d => d.patientId))
+
+        let availablePatents = unionBy(examinations_mg.map(d => d.examination.patientId), examinations_fb.map(d => d.patientId))
 
         toBeAdded = examinations_fb.filter(e => {
             return toBeAdded.includes(e.patientId)
@@ -593,12 +600,12 @@ const syncExaminations = async (req, res) => {
             let replaceCommands = forms.map( form => ({
                 replaceOne: {
                     "filter": { 'examination.patientId': form.examination.patientId },
-                    "replacement": l,
+                    "replacement": form,
                     "upsert": true
                 }
             }))
 
-            await mongodb.execute.bulkWrite({
+            await mongodb.bulkWrite({
                 db: DB,
                 collection: `${DB.name}.forms`,
                 commands: replaceCommands
@@ -620,14 +627,16 @@ const syncExaminations = async (req, res) => {
                 }
             }))
 
-            await mongodb.execute.bulkWrite({
+            await mongodb.bulkWrite({
                 db: DB,
                 collection: `${DB.name}.forms`,
                 commands: replaceCommands
             })
         }
         
-        let availablePatents = examinations_fb.map(f => f.patientId)
+        // let availablePatents = examinations_fb.map(f => f.patientId)
+
+        console.log("Sync Examination: user:", user,  "availablePatents:", availablePatents)
 
         let availableForms = await mongodb.aggregate({
             db: DB,
@@ -668,7 +677,7 @@ const syncExaminations = async (req, res) => {
         })
 
         res.send(availableForms)
-        console.log("--------------------------------> DONE")
+        // console.log("--------------------------------> DONE")
 
     } catch (e) {
         res.send({

@@ -10,6 +10,12 @@ module.exports = {
             users: {
                 collection: "users",
             },
+            usersDev: {
+                collection: "users-dev",
+            },
+            organizations: {
+                collection: "organizations"
+            },
             rules: {
                 collection: "validation-rules"
             },

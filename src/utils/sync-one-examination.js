@@ -5,11 +5,13 @@ const { loadYaml, pathExists } = require("../utils/file-system")
 const uuid = require("uuid").v4
 const mongodb = require("./mongodb")
 const fb = require("./fb")
+const s3bucket = require("./s3-bucket")
 
 const adeDB = require("../../.config/ade-import").db
 
 const clinicDB = require("../../.config/ade-clinic").mongodb
 
+const s3 = require("../../.config/ade-clinic").s3
 
 const getSubmitedForm = async patientId => {
 
@@ -32,155 +34,48 @@ const getSubmitedForm = async patientId => {
     return data[0]
 }
 
-const buildFormCommands = data => {
-
-    let formRecords = []
-
-    if (data.patient) {
-        formRecords.push({
-            id: uuid(),
-            data: {
-                en: data.patient,
-                uk: data.patient
-            },
-            type: "patient",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    } else {
-        formRecords.push({
-            id: uuid(),
-            data: {
-                en: {},
-                uk: {}
-            },
-            type: "patient",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    }
-
-    if (data.ekg) {
-        formRecords.push({
-            id: uuid(),
-            data: {
-                en: data.ekg,
-                uk: data.ekg
-            },
-            type: "ekg",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    } else {
-        formRecords.push({
-            id: uuid(),
-            data: {
-                en: {},
-                uk: {}
-            },
-            type: "ekg",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    }
-
-    if (data.echo) {
-        formRecords.push({
-            id: uuid(),
-            data: {
-                en: data.echo,
-                uk: data.echo
-            },
-            type: "echo",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    } else {
-        formRecords.push({
-            id: uuid(),
-            data: {
-                en: {},
-                uk: {}
-            },
-            type: "echo",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    }
-
-    if (data.attachements) {
-        formRecords.push({
-            id: uuid(),
-            data: data.attachements,
-            type: "attachements",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    } else {
-        formRecords.push({
-            id: uuid(),
-            data: [],
-            type: "attachements",
-            examinationId: data.examination.id,
-            patientId: data.examination.patientId
-        })
-    }
-
-    return formRecords.map(f => ({
-        replaceOne: {
-            "filter": { 
-                patientId: f.patientId,
-                type: f.type 
-            },
-            "replacement": f,
-            "upsert": true
-        }
-    }))
-}
-
 const buildExaminationCommand = data => {
     
-    let examination = data.examination
-    examination.state = "inReview"
-    examination.protocol = data.protocol
-    examination.org = data.organization
-    examination.synchronizedAt = new Date()
-    examination.actorId = data.fbActor.userId
-    examination.organization = data.fbOrganization.id
+
+    let result = {
+        id: data.id,
+        actorId: data.user.id,
+        patientId: data.examination.patientId,
+        protocol: data.protocol,  
+        state: "inReview",
+        comment: data.examination.comment,
+        createdAt: new Date(data.examination.dateTime),
+        submitedAt: new Date(),
+        forms: {
+            patient: {
+                type: "patient",
+                data: data.patient || {}
+            },
+            echo: {
+                type: "echo",
+                data: data.echo || {}
+            },
+            ekg: {
+                type: "ekg",
+                data: data.ekg || {}  
+            },
+            attachements: {
+                type: "attachements",
+                data: data.attachements || []  
+            }
+        }
+    }
     
     return [{
         replaceOne: {
-            "filter": { patientId: examination.patientId },
-            "replacement": examination,
+            "filter": { patientId: result.patientId },
+            "replacement": result,
             "upsert": true
         }
     }]
 
 }
 
-const buildActorCommand = data => {
-    
-    return [{
-        replaceOne: {
-            "filter": { id: data.fbActor.userId },
-            "replacement": data.fbActor,
-            "upsert": true
-        }
-    }]
-
-}
-
-const buildOrgCommand = data => {
-
-    return [{
-        replaceOne: {
-            "filter": { id: data.fbOrganization.userId },
-            "replacement": data.fbOrganization,
-            "upsert": true
-        }
-    }]
-
-}
 
 const spotMap = {
           mitral: "Apex",
@@ -202,11 +97,12 @@ const spotMap = {
 
 
 const buildRecordCommands = data => {
+
     let res = data.recordings.map(d => ({
         "id": uuid(),
-        "Examination ID": data.examination.patientId,
+        "patientId": data.examination.patientId,
+        "examinationId": data.id,
         "Source": d.Source,
-        "Clinic": data.user.submit.clinic,
         "Age (Years)": data.patient.age,
         "Sex at Birth": data.patient.sex_at_birth,
         "Ethnicity": data.patient.ethnicity,
@@ -220,21 +116,15 @@ const buildRecordCommands = data => {
         "Other murmurs": [],
         "Pathological findings": [],
         "path": d.Source.path,
-        "state": "Assign 2nd expert",
-        "CMO": "Yaroslav Shpak",
-        "TODO": "Assign 2nd expert",
-        "updated at": new Date(),
-        "updated by": "import utils",
-        "Stage Comment": "Added by import utils",
-        "assigned to": "Oleh Shpak",
         "Lung Sound Informativeness": "Non assessed",
+        "taskList": []
     }))
 
     return res.map(d => ({
         replaceOne: {
             "filter": { 
 
-                "Examination ID": d["Examination ID"],
+                "patientId": d.patientId,
                 "Body Position": d["Body Position"],
                 "Body Spot": d["Body Spot"],
                 "model": d.model
@@ -247,119 +137,117 @@ const buildRecordCommands = data => {
 }
 
 
+const resolveAttachements = async data => {
+    if(data.attachements){
+        for(let a of data.attachements) {
+            const source = a.path
+            const encodedFileName = `${uuid()}${path.extname(a.name)}`
+            const destination = `${s3.root.files}/${encodedFileName}`
+            await s3bucket.copyObject({ source, destination })
+            console.log(`${source} > ${destination}`)
+            a.name = encodedFileName
+            a.publicName = encodedFileName
+            a.ref = source
+            a.path = destination
+            a.url = await s3bucket.getPresignedUrl(a.path)
+        }
+    }
+    return data
+}
+
+
+const resolveEcho = async data => {
+    if(data.echo && data.echo.dataUrl){
+        const source = data.echo.dataPath
+        const encodedFileName = `${uuid()}${path.extname(data.echo.dataFileName)}`
+        const destination = `${s3.root.echos}/${encodedFileName}`
+        await s3bucket.copyObject({ source, destination })
+        console.log(`${source} > ${destination}`)
+        data.echo.dataFileName = encodedFileName
+        data.echo.dataRef = source
+        data.echo.dataPath = destination
+        data.echo.dataUrl = await s3bucket.getPresignedUrl(data.echo.dataPath)
+    }
+    return data
+}
+
+
+
 module.exports = async settings => {
 
+    try {
+
     const { protocol, organization, patientId, state, user } = settings
-    const collection = adeDB.collection[organization] || adeDB.collection["default"]
+    
+    const SCHEMA = user.submit.schema || "CLINIC-UNDEFINED-SCHEMA"
 
     let examination = await getSubmitedForm(patientId)
     if (!examination) return
 
-    let fbActor = await fb.getCollectionItems("users",[["patientIdPrefix", "==", patientId.substring(0,3)]])    
-    fbActor = fbActor[0]
-    let fbOrganization
-    
-    if(fbActor){
-        fbOrganization = await fb.getOrganization(fbActor.organization)
-    }
+    examination = await resolveAttachements(examination)
+    examination = await resolveEcho(examination)    
+    examination = extend(examination, { id: uuid(), protocol, user })
 
-    examination = extend(examination, { protocol, organization, user, fbActor, fbOrganization })
-
-    // import actor
-    const actorCommands = (fbActor) ? buildActorCommand(examination) : []
-    console.log("actorCommands", JSON.stringify(actorCommands, null, " "))
-    
-    if(actorCommands.length > 0){
-        await mongodb.bulkWrite({
-                db: adeDB,
-                collection: collection.users,
-                commands: actorCommands
-            })
-    }
-
-    // import organization
-    const orgCommands = (fbOrganization) ? buildOrgCommand(examination) : []
-    console.log("orgCommands", JSON.stringify(orgCommands, null, " "))
-
-    if(orgCommands.length > 0){
-        await mongodb.bulkWrite({
-                db: adeDB,
-                collection: collection.organizations,
-                commands: orgCommands
-            })
-    }
-
+ 
     // import examination
     const examinationCommands = buildExaminationCommand(examination)
-    console.log("examinationCommands", JSON.stringify(examinationCommands, null, " "))
     
     if(examinationCommands.length > 0){
         await mongodb.bulkWrite({
                 db: adeDB,
-                collection: collection.examinations,
+                collection: `${SCHEMA}.examinations`,
                 commands: examinationCommands
             })
     }
 
-    // import forms
-    const formCommands = buildFormCommands(examination)
-    console.log("formCommands", JSON.stringify(formCommands, null, " "))
-
-    if(formCommands.length > 0){
-        await mongodb.bulkWrite({
-                db: adeDB,
-                collection: collection.forms,
-                commands: formCommands
-            })
-    }
-    
     // import records
     const recordCommands = buildRecordCommands(examination)
-    console.log("recordCommands", JSON.stringify(recordCommands, null, " "))
 
     if(recordCommands.length > 0){
         await mongodb.bulkWrite({
                 db: adeDB,
-                collection: collection.labels,
+                collection: `${SCHEMA}.labels`,
                 commands: recordCommands
             })
     }
     
 
 
-    // finalize in fb
+    // // finalize in fb
 
-    let batch = fb.db.batch()
+    // let batch = fb.db.batch()
 
-    try {
+    // try {
 
-        let doc = fb.db.collection("examinations").doc(examination.examination.id)
-        batch.update(doc, { state: "inReview" })
-        await batch.commit()
+    //     let doc = fb.db.collection("examinations").doc(examination.examination.id)
+    //     batch.update(doc, { state: "inReview" })
+    //     await batch.commit()
 
-    } catch (e) {
+    // } catch (e) {
 
-        console.log(e.toString())
+    //     console.log(e.toString())
 
-    }
+    // }
 
 
 
-    // finalize in clinic
+    // // finalize in clinic
 
-    await mongodb.updateOne({
-        db: clinicDB,
-        collection: `${clinicDB.name}.forms`,
-        filter:{"examination.patientId": patientId},
-        data: {
-            "examination.state": "finalized",
-            "status": "finalized"
-        }
-    })
+    // await mongodb.updateOne({
+    //     db: clinicDB,
+    //     collection: `${clinicDB.name}.forms`,
+    //     filter:{"examination.patientId": patientId},
+    //     data: {
+    //         "examination.state": "finalized",
+    //         "status": "finalized"
+    //     }
+    // })
 
 
     return {
-        collection,
         records: recordCommands.map(d => d.replaceOne.replacement)
+    }
+    } catch(e) {
+        console.log(e.toString(), e.stack)
     }
 }

@@ -636,7 +636,7 @@ const syncExaminations = async (req, res) => {
         
         // let availablePatents = examinations_fb.map(f => f.patientId)
 
-        console.log("Sync Examination: user:", user,  "availablePatents:", availablePatents)
+        // console.log("Sync Examination: user:", user,  "availablePatents:", availablePatents)
 
         let availableForms = await mongodb.aggregate({
             db: DB,
@@ -695,11 +695,13 @@ const postSubmitOneExamination = async (req, res) => {
 
         const { settings } = req.body
         let { user } = settings 
-        const { users } = req.body.cache
+        const { users, usersDev } = req.body.cache
         
         let grants = find(users, u => u.email.includes(user.email))
         settings.user = grants
-
+        settings.user.id = find(usersDev, u => u.email.includes(user.email))
+        settings.user.id = (settings.user.id) ? settings.user.id.id : undefined
+            
         if (req.eventHub.listenerCount("transfer-clinic-data") == 0) {
             req.eventHub.on("transfer-clinic-data", transferClinicData)
         }

@@ -55,7 +55,7 @@ const getAISegmentation = async settings => {
     let result = []
 
     for (let r of records) {
-        console.log("LONG-TERM: getAISegmentation for ", r)
+        console.log("LONG-TERM: getAISegmentation for ", r.patientId, r["Body Spot"], r.model)
         let segmentation = {
             id: uuid(),
             patientId: r["Examination ID"],
@@ -117,9 +117,11 @@ const getAISegmentation = async settings => {
 const updateAISegmentation = async settings => {
     
 
-    let { collection, records } = settings
+    let { records, user } = settings
     
-    console.log("LONG-TERM: updateAISegmentation: started")
+    const SCHEMA = user.submit.schema    
+
+    console.log("LONG-TERM: updateAISegmentation: started on ${SCHEMA}")
 
 ///////////////////// debug /////////////////////////    
     // records = records.slice(0,5)
@@ -127,13 +129,13 @@ const updateAISegmentation = async settings => {
 
     let segmentations = await getAISegmentation({records})
     
-    console.log(`LONG-TERM: updateAISegmentation: insert ${segmentations.length} items into ${collection.segmentations}`)
+    // console.log(`LONG-TERM: updateAISegmentation: insert ${segmentations.length} items into ${collection.segmentations}`)
     
-    await mongodb.insertAll({
-        db,
-        collection: collection.segmentations,
-        data: segmentations
-    })
+    // await mongodb.insertAll({
+    //     db,
+    //     collection: collection.segmentations,
+    //     data: segmentations
+    // })
 
     let commands = segmentations
         .filter( s => !s.error)
@@ -144,14 +146,14 @@ const updateAISegmentation = async settings => {
                             },
                             update: {
                                 $set:{
-                                    aiSegmentation: s.id
+                                    aiSegmentation: s.data
                                 }
                             },
                             upsert: true
                         }
     }))
 
-    console.log(`LONG-TERM: updateAISegmentation: update ${commands.length} items in ${collection.labels}`)
+    console.log(`LONG-TERM: updateAISegmentation: update ${commands.length} items in ${SCHEMA}.labels`)
     
     if(segmentations.length > commands.length){
         console.log(`LONG-TERM: updateAISegmentation: no segmentation for`, segmentations.filter(s => s.error))
@@ -159,7 +161,7 @@ const updateAISegmentation = async settings => {
 
     await mongodb.bulkWrite({
                 db,
-                collection: collection.labels,
+                collection: `${SCHEMA}.labels`,
                 commands
             })
      

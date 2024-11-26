@@ -121,7 +121,7 @@ const updateAISegmentation = async settings => {
     
     const SCHEMA = user.submit.schema    
 
-    console.log("LONG-TERM: updateAISegmentation: started on ${SCHEMA}")
+    console.log(`LONG-TERM: updateAISegmentation: started on ${SCHEMA}`)
 
 ///////////////////// debug /////////////////////////    
     // records = records.slice(0,5)

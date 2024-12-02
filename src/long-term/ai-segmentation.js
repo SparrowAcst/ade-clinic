@@ -55,7 +55,7 @@ const getAISegmentation = async settings => {
     let result = []
 
     for (let r of records) {
-        console.log("LONG-TERM: getAISegmentation for ", r)
+        console.log("LONG-TERM: getAISegmentation for ", r["Examination ID"], r.model, r["Body Spot"])
         let segmentation = {
             id: uuid(),
             patientId: r["Examination ID"],

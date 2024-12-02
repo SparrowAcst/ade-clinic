@@ -559,7 +559,9 @@ const syncExaminations = async (req, res) => {
             pipeline: [
                 {
                     '$match': {
-                        'examination.state': "pending"
+                        // 'examination.state': {
+                        //     $in: ["pending", "submited"]
+                        // }    
                     }
                 },
                 {
@@ -580,13 +582,23 @@ const syncExaminations = async (req, res) => {
         let toBeAdded = difference(examinations_fb.map(d => d.patientId), examinations_mg.map(d => d.examination.patientId))
         let toBeLocked = difference(examinations_mg.map(d => d.examination.patientId), examinations_fb.map(d => d.patientId))
 
-        let availablePatents = unionBy(examinations_mg.map(d => d.examination.patientId), examinations_fb.map(d => d.patientId))
+        let availablePatents = unionBy(
+            examinations_mg.map(d => d.examination.patientId), 
+            examinations_fb.map(d => d.patientId)
+        )
 
         toBeAdded = examinations_fb.filter(e => {
             return toBeAdded.includes(e.patientId)
         })
 
         
+        console.log("FB", examinations_fb.map(d => `${d.patientId}:${d.state}`))
+        console.log("MG", examinations_mg.map(d => `${d.examination.patientId}:${d.examination.state}`))
+        console.log("toBeAdded", toBeAdded)
+        console.log("toBeLocked", toBeLocked)
+
+
+
         let forms = []
 
         for (let i = 0; i < toBeAdded.length; i++) {
@@ -636,14 +648,15 @@ const syncExaminations = async (req, res) => {
         
         // let availablePatents = examinations_fb.map(f => f.patientId)
 
-        console.log("Sync Examination: user:", user,  "availablePatents:", availablePatents)
-
+        
         let availableForms = await mongodb.aggregate({
             db: DB,
             collection: `${DB.name}.forms`,
             pipeline: [{
                     '$match': {
-                        'examination.state': "pending",
+                        'examination.state': {
+                            $ne: "finalized"
+                        },
                         "examination.patientId": {
                             $in: availablePatents
                         }
@@ -676,6 +689,8 @@ const syncExaminations = async (req, res) => {
             ]
         })
 
+        console.log("Sync Examinations for", user.name,  "availablePatents:", availableForms.map( d => d["Patient ID"]))
+
         res.send(availableForms)
         // console.log("--------------------------------> DONE")
 
@@ -694,7 +709,7 @@ const postSubmitOneExamination = async (req, res) => {
     try {
 
         const { settings } = req.body
-        let { user } = settings 
+        let { user, patientId } = settings 
         const { users } = req.body.cache
         
         let grants = find(users, u => u.email.includes(user.email))
@@ -703,6 +718,17 @@ const postSubmitOneExamination = async (req, res) => {
         if (req.eventHub.listenerCount("transfer-clinic-data") == 0) {
             req.eventHub.on("transfer-clinic-data", transferClinicData)
         }
+
+
+        await mongodb.updateOne({
+            db: DB,
+            collection: `${DB.name}.forms`,
+            filter:{"examination.patientId": patientId},
+            data: {
+                "examination.state": "finalized",
+                "status": "finalized"
+            }
+        })
 
         req.eventHub.emit("transfer-clinic-data", settings)
 

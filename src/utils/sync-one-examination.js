@@ -267,8 +267,10 @@ module.exports = async settings => {
 
     // import actor
     const actorCommands = (fbActor) ? buildActorCommand(examination) : []
-    console.log("actorCommands", JSON.stringify(actorCommands, null, " "))
+    // console.log("actorCommands", JSON.stringify(actorCommands, null, " "))
     
+    console.log(`ADE IMPORT ${patientId}: insert into ${collection.users} ${actorCommands.length} items`)
+
     if(actorCommands.length > 0){
         await mongodb.bulkWrite({
                 db: adeDB,
@@ -279,7 +281,8 @@ module.exports = async settings => {
 
     // import organization
     const orgCommands = (fbOrganization) ? buildOrgCommand(examination) : []
-    console.log("orgCommands", JSON.stringify(orgCommands, null, " "))
+    // console.log("orgCommands", JSON.stringify(orgCommands, null, " "))
+    console.log(`ADE IMPORT ${patientId}: insert into ${collection.organizations} ${orgCommands.length} items`)
 
     if(orgCommands.length > 0){
         await mongodb.bulkWrite({
@@ -291,7 +294,9 @@ module.exports = async settings => {
 
     // import examination
     const examinationCommands = buildExaminationCommand(examination)
-    console.log("examinationCommands", JSON.stringify(examinationCommands, null, " "))
+    // console.log("examinationCommands", JSON.stringify(examinationCommands, null, " "))
+
+    console.log(`ADE IMPORT ${patientId}: insert into ${collection.examinations} ${examinationCommands.length} items`)
     
     if(examinationCommands.length > 0){
         await mongodb.bulkWrite({
@@ -303,7 +308,7 @@ module.exports = async settings => {
 
     // import forms
     const formCommands = buildFormCommands(examination)
-    console.log("formCommands", JSON.stringify(formCommands, null, " "))
+    // console.log("formCommands", JSON.stringify(formCommands, null, " "))
 
     if(formCommands.length > 0){
         await mongodb.bulkWrite({
@@ -315,8 +320,9 @@ module.exports = async settings => {
     
     // import records
     const recordCommands = buildRecordCommands(examination)
-    console.log("recordCommands", JSON.stringify(recordCommands, null, " "))
-
+    // console.log("recordCommands", JSON.stringify(recordCommands, null, " "))
+    console.log(`ADE IMPORT ${patientId}: insert into ${collection.labels} ${recordCommands.length} items`)
+    
     if(recordCommands.length > 0){
         await mongodb.bulkWrite({
                 db: adeDB,
@@ -347,15 +353,15 @@ module.exports = async settings => {
 
     // finalize in clinic
 
-    await mongodb.updateOne({
-        db: clinicDB,
-        collection: `${clinicDB.name}.forms`,
-        filter:{"examination.patientId": patientId},
-        data: {
-            "examination.state": "finalized",
-            "status": "finalized"
-        }
-    })
+    // await mongodb.updateOne({
+    //     db: clinicDB,
+    //     collection: `${clinicDB.name}.forms`,
+    //     filter:{"examination.patientId": patientId},
+    //     data: {
+    //         "examination.state": "finalized",
+    //         "status": "finalized"
+    //     }
+    // })
 
 
     return {

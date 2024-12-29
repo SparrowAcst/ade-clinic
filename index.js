@@ -82,6 +82,17 @@ module.exports = {
         router.get("/i18n/md5", [authorize, DBCache, I18n.getLocaleMd5])
 
         /////////////////////////////////////////////////////////////////////////////////////
+
+        const test = require("./src/routes/test")
+        const externalWorkflow = require("./src/utils/external-workflow")
+        await externalWorkflow.getConsumer("submitExaminationReport")
+
+        router.get("/test/messages", test.getMessages)
+        router.get("/test/messages/:requestId", test.getMessages)
+        router.post("/test/send", test.send)
+        
+
+        /////////////////////////////////////////////////////////////////////////////////////
         return router
     }
 }

@@ -31,7 +31,18 @@ const s3Bucket = require("../utils/s3-bucket")
 const dataService = require("../utils/stethophone-data-service")
 
 
-const { transferClinicData } = require("../long-term/transfer-clinic-data")
+// const { transferClinicData } = require("../long-term/transfer-clinic-data")
+
+const externalWorkflow = require("../utils/external-workflow")
+
+const initMigrateExamination = async settings => {
+
+    let publisher = await externalWorkflow.getPublisher("syncExamination")
+    publisher.send(settings)
+
+}    
+
+
 
 const config = require("../../.config/ade-clinic")
 
@@ -545,13 +556,17 @@ const postSubmitOneExamination = async (req, res) => {
         settings.user.id = find(usersDev, u => u.email.includes(user.email))
         settings.user.id = (settings.user.id) ? settings.user.id.id : undefined
             
-        if (req.eventHub.listenerCount("transfer-clinic-data") == 0) {
-            req.eventHub.on("transfer-clinic-data", transferClinicData)
+        if (req.eventHub.listenerCount("migrate-clinic-data") == 0) {
+            req.eventHub.on("migrate-clinic-data", initMigrateExamination) //transferClinicData)
         }
 
-        req.eventHub.emit("transfer-clinic-data", settings)
+        settings.requestId = uuid()
+        console.log("REQUEST:", settings.requestId)
+        req.eventHub.emit("migrate-clinic-data", settings)
 
-        res.status(200).send()
+        res.status(200).send({
+            requestId: settings.requestId
+        })
 
     } catch (e) {
         res.status(500).send(e.toString() + e.stack)

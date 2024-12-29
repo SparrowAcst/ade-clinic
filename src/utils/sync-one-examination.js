@@ -1,25 +1,17 @@
-const moment = require("moment")
-const path = require("path")
-const { find, sortBy, filter, extend, isUndefined, isNull, isArray } = require("lodash")
-const { loadYaml, pathExists } = require("../utils/file-system")
+const { extend, isArray } = require("lodash")
 const uuid = require("uuid").v4
-const mongodb = require("./mongodb")
+const docdb = require("./docdb")
 const fb = require("./fb")
 const s3bucket = require("./s3-bucket")
-
-const adeDB = require("../../.config/ade-import").db
-const encodeDB = require("../../.config/ade-import").encodeDB
-
-const clinicDB = require("../../.config/ade-clinic").mongodb
-
+const path = require("path")
 
 const s3 = require("../../.config/ade-clinic").s3
 
 const getSubmitedForm = async patientId => {
 
-    data = await mongodb.aggregate({
-        db: clinicDB,
-        collection: `${clinicDB.name}.forms`,
+    data = await docdb.aggregate({
+        db: "CLINIC",
+        collection: `sparrow-clinic.forms`,
         pipeline: [{
                 $match: {
                     "examination.patientId": patientId
@@ -41,13 +33,10 @@ const buildExaminationCommand = data => {
 
     let result = {
         id: data.id,
-        actorId: data.user.id,
-        patientId: data.examination.patientId,
+        siteId: data.siteId,
         protocol: data.protocol,
         state: "inReview",
         comment: data.examination.comment,
-        createdAt: new Date(data.examination.dateTime),
-        submitedAt: new Date(),
         forms: {
             patient: {
                 type: "patient",
@@ -100,9 +89,8 @@ const buildRecordCommands = data => {
 
     let res = data.recordings.map(d => ({
         "id": uuid(),
-        "patientId": data.examination.patientId,
         "examinationId": data.id,
-        "Source": d.Source,
+        Source: d.Source,
         "Age (Years)": data.patient.age,
         "Sex at Birth": data.patient.sex_at_birth,
         "Ethnicity": data.patient.ethnicity,
@@ -144,8 +132,8 @@ const saveEncoding = async (data, SCHEMA) => {
     data = isArray(data) ? data : [data]
 
     if (data.length > 0) {
-        await mongodb.bulkWrite({
-            db: encodeDB,
+        await docdb.bulkWrite({
+            db: "TEST", // "ADE",
             collection: `ADE-ENCODING.${SCHEMA}-files`,
             commands: data.map(d => ({
                 replaceOne: {
@@ -216,21 +204,24 @@ module.exports = async settings => {
         const { protocol, organization, patientId, state, user } = settings
 
         const SCHEMA = user.submit.schema || "CLINIC-UNDEFINED-SCHEMA"
+        const SITE_ID = user.submit.siteId || "SITE-ID-UNDEFINED"
 
+        const EXAMINATION_ID = uuid()
         let examination = await getSubmitedForm(patientId)
         if (!examination) return
 
         examination = await resolveAttachements(examination, SCHEMA)
         examination = await resolveEcho(examination, SCHEMA)
-        examination = extend(examination, { id: uuid(), protocol, user })
+        examination = extend(examination, { id: EXAMINATION_ID, protocol, user })
 
 
         // import examination
+        examination.siteId = SITE_ID
         const examinationCommands = buildExaminationCommand(examination)
 
         if (examinationCommands.length > 0) {
-            await mongodb.bulkWrite({
-                db: adeDB,
+            await docdb.bulkWrite({
+                db: "TEST", //"ADE",
                 collection: `${SCHEMA}.examinations`,
                 commands: examinationCommands
             })
@@ -240,8 +231,8 @@ module.exports = async settings => {
         const recordCommands = buildRecordCommands(examination)
 
         if (recordCommands.length > 0) {
-            await mongodb.bulkWrite({
-                db: adeDB,
+            await docdb.bulkWrite({
+                db: "TEST", //"ADE",
                 collection: `${SCHEMA}.labels`,
                 commands: recordCommands
             })
@@ -269,7 +260,7 @@ module.exports = async settings => {
 
         // // finalize in clinic
 
-        // await mongodb.updateOne({
+        // await docdb.updateOne({
         //     db: clinicDB,
         //     collection: `${clinicDB.name}.forms`,
         //     filter:{"examination.patientId": patientId},
@@ -281,6 +272,7 @@ module.exports = async settings => {
 
 
         return {
+            examinationId: EXAMINATION_ID,
             records: recordCommands.map(d => d.replaceOne.replacement)
         }
     } catch (e) {

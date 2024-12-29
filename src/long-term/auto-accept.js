@@ -1,7 +1,7 @@
 const { extend, isArray } = require("lodash")
-const mongodb = require("../utils/mongodb")
+const docdb = require("../utils/docdb")
 
-const { db, encodeDB } = require("../../.config/ade-import")
+// const con = require("../../.config/ade-import")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -129,11 +129,26 @@ let echoRules = [
 
 const checkRules = data => {
 
-    let result = patientRules.map(r => r(data.patient)).concat(echoRules.map(r => r(data.echo))).filter(r => r != false)
+    let result = patientRules.map(r => r(data.patient.data)).concat(echoRules.map(r => r(data.echo.data))).filter(r => r != false)
     return (result.length == 0) ? false : result
 
 
 }
+
+
+const indicateRules = data => {
+
+    let result = 
+        patientRules.map(r => ({p:r(data.patient.data)}))
+            .concat(
+                echoRules.map(r => ({e: r(data.echo.data)}))
+        )
+    return result
+
+
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -189,46 +204,16 @@ const acceptExamination = async (examination, SCHEMA) => {
 
     console.log(`LONG-TERM: autoaccept: update ${SCHEMA}.examinations`)
 
-    await mongodb.updateOne({
-        db,
+    await docdb.updateOne({
+        db: "TEST", //"ADE",
         collection: `${SCHEMA}.examinations`,
         filter: {
             id: examination.id
         },
         data: {
-            patientId: null,
             state: "accepted",
             updatedAt: new Date(),
             updatedBy: "AUTO ACCEPT"
-        }
-    })
-
-    console.log(`LONG-TERM: autoaccept: update ${SCHEMA}.labels`)
-
-    await mongodb.updateMany({
-        db,
-        collection: `${SCHEMA}.labels`,
-        filter: {
-            id: {
-                $in: examination.records.map(r => r.id)
-            }
-        },
-        data: {
-            patientId: null
-        }
-    })
-
-    console.log(`LONG-TERM: autoaccept: update ADE-ENCODING.${SCHEMA}-patients`)
-
-    await mongodb.replaceOne({
-        db: encodeDB,
-        collection: `ADE-ENCODING.${SCHEMA}-patients`,
-        filter: {
-            id: examination.id
-        },
-        data: {
-            id: examination.id,
-            patientId: examination.patientId
         }
     })
 
@@ -238,16 +223,26 @@ const acceptExamination = async (examination, SCHEMA) => {
 
 const autoAccept = async settings => {
 
-    let { patientId, user } = settings
+    let { examinationId, user } = settings
     const SCHEMA = user.submit.schema
 
     try {
-        
-        console.log(`LONG-TERM: autoaccept: started for ${patientId} on ${SCHEMA}`)
+
+        console.log(`LONG-TERM: autoaccept: started for ${examinationId} on ${SCHEMA}`)
+
+        const availableBodySpots = [
+            "Apex",
+            "Tricuspid",
+            "Pulmonic",
+            "Aortic",
+            "Right Carotid",
+            "Erb's",
+            "Erb's Right",
+        ]
 
         const pipeline = [{
                 $match: {
-                    patientId,
+                    id: examinationId,
                 },
             },
             {
@@ -255,54 +250,41 @@ const autoAccept = async settings => {
                     from: "labels",
                     localField: "id",
                     foreignField: "examinationId",
-                    as: "records",
-                    pipeline: [{
-                            $match: {
-                                "Body Spot": {
-                                    $in: [
-                                        "Apex",
-                                        "Tricuspid",
-                                        "Pulmonic",
-                                        "Aortic",
-                                        "Right Carotid",
-                                        "Erb's",
-                                        "Erb's Right",
-                                    ],
-                                },
-                            },
-                        },
-                        {
-                            $project: {
-                                _id: 0,
-                                id: 1,
-                                qty: "$aiSegmentation.quality",
-                            },
-                        },
-                    ],
+                    as: "records"
                 },
             },
         ]
 
-        let examination = await mongodb.aggregate({
-            db,
+        let examination = await docdb.aggregate({
+            db: "TEST", //"ADE",
             collection: `${SCHEMA}.examinations`,
             pipeline
         })
 
         examination = examination[0]
 
-        // console.log(examination)
+        
+        if(examination) {
 
-        if(examination && checkAcceptanceCriteria(examination.forms) && checkRecordsQuality(examination.records)){
-        await acceptExamination(examination, SCHEMA)
-        } else {
-            console.log(`LONG-TERM: autoaccept: for ${patientId} on ${SCHEMA} - NO ACCEPTANCE CRITERIA`)
+            examination.records = examination.records
+                                    .filter( r => availableBodySpots.includes(r["Body Spot"]))
+                                    .map( r => ({
+                                        id: r.id,
+                                        qty: (r.aiSegmentation) ? r.aiSegmentation.quality : undefined
+                                    })) 
+            
+            
+            if (checkAcceptanceCriteria(examination.forms) && checkRecordsQuality(examination.records)) {
+                await acceptExamination(examination, SCHEMA)
+            } else {
+                console.log(`LONG-TERM: autoaccept: for ${examinationId} on ${SCHEMA} - NO ACCEPTANCE CRITERIA`)
+            }    
         }
 
-        console.log(`LONG-TERM: autoaccept: for ${patientId} on ${SCHEMA} done`)
+        console.log(`LONG-TERM: autoaccept: for ${examinationId} on ${SCHEMA} done`)
 
     } catch (e) {
-        console.log(`LONG-TERM: autoaccept: for ${patientId} on ${SCHEMA} error`, e.toString(), e.stack)
+        console.log(`LONG-TERM: autoaccept: for ${examinationId} on ${SCHEMA} error`, e.toString(), e.stack)
     }
 
 }

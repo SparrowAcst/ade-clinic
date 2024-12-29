@@ -1,6 +1,7 @@
-const mongodb = require("../utils/mongodb")
+const docdb = require("../utils/docdb")
 const { extend, keys, isFunction } = require("lodash")
-const db = require("../../.config/ade-clinic").mongodb
+
+// const db = require("../../.config/sparrow-clinic").docdb
 
 
 let CACHE = {}
@@ -9,7 +10,7 @@ let COLLECTIONS = {}
 
 const init = async collections => {
 
-    console.log(`Init DB Cache:\n${JSON.stringify(db, null, " ")}`)
+    console.log(`Init DB Cache:\n`)
     COLLECTIONS = collections || COLLECTIONS
 
     console.log(COLLECTIONS)
@@ -20,9 +21,9 @@ const init = async collections => {
 
     for (const cacheProperty of cacheProperties) {
 
-        CACHE[cacheProperty] = await mongodb.aggregate({
-            db,
-            collection: `${db.name}.${COLLECTIONS[cacheProperty].collection}`,
+        CACHE[cacheProperty] = await docdb.aggregate({
+            db:"CLINIC",
+            collection: `sparrow-clinic.${COLLECTIONS[cacheProperty].collection}`,
             pipeline: [{
                 $project: {
                     _id: 0
@@ -34,8 +35,8 @@ const init = async collections => {
             CACHE[cacheProperty] = CACHE[cacheProperty].map(d =>  COLLECTIONS[cacheProperty].mapper(d))
         }
         
-        console.log(`Load ${CACHE[cacheProperty].length} items from ${db.name}.${COLLECTIONS[cacheProperty].collection} as ${cacheProperty}`)
-        res.push(`Load ${CACHE[cacheProperty].length} items from ${db.name}.${COLLECTIONS[cacheProperty].collection} as ${cacheProperty}`)
+        console.log(`Load ${CACHE[cacheProperty].length} items from sparrow-clinic.${COLLECTIONS[cacheProperty].collection} as ${cacheProperty}`)
+        res.push(`Load ${CACHE[cacheProperty].length} items from sparrow-clinic.${COLLECTIONS[cacheProperty].collection} as ${cacheProperty}`)
     }
     return res.join("\n")
 }

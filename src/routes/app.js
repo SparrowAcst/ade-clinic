@@ -17,21 +17,16 @@ const {
     unionBy,
     chunk
 } = require("lodash")
-const moment = require("moment")
+
 const path = require("path")
 const uuid = require("uuid").v4
 const axios = require("axios")
 const fs = require("fs")
 const fsp = require("fs").promises
-const filesize = require("file-size")
 
 const s3Bucket = require("../utils/s3-bucket")
-// const fb = require("../utils/fb")
 
 const dataService = require("../utils/stethophone-data-service")
-
-
-// const { transferClinicData } = require("../long-term/transfer-clinic-data")
 
 const externalWorkflow = require("../utils/external-workflow")
 
@@ -42,12 +37,10 @@ const initMigrateExamination = async settings => {
 
 }    
 
-
-
 const config = require("../../.config/ade-clinic")
 
 const TEMP_UPLOAD_DIR = path.resolve(config.UPLOAD_DIR)
-// const DB = config.docdb
+
 
 const getGrants = async (req, res) => {
     
@@ -415,9 +408,6 @@ const copyFromURLToS3 = async ({ source, target }) => {
 
 }
 
-
-
-
 const syncAssets = async (req, res) => {
 
     try {
@@ -549,21 +539,24 @@ const postSubmitOneExamination = async (req, res) => {
 
         const { settings } = req.body
         let { user } = settings 
-        const { users, usersDev } = req.body.cache
+        const { users } = req.body.cache
         
         let grants = find(users, u => u.email.includes(user.email))
         settings.user = grants
-        settings.user.id = find(usersDev, u => u.email.includes(user.email))
-        settings.user.id = (settings.user.id) ? settings.user.id.id : undefined
             
         if (req.eventHub.listenerCount("migrate-clinic-data") == 0) {
-            req.eventHub.on("migrate-clinic-data", initMigrateExamination) //transferClinicData)
+            req.eventHub.on("migrate-clinic-data", initMigrateExamination) 
         }
 
         settings.requestId = uuid()
-        console.log("REQUEST:", settings.requestId)
-        req.eventHub.emit("migrate-clinic-data", settings)
-
+        console.log(`MIGRATE CLINIC DATA REQUEST: ${settings.requestId} INITIATED BY ${user.name}`)
+        
+        if(user.submit){
+            req.eventHub.emit("migrate-clinic-data", settings)
+        } else {
+            console.log(`REQUEST: ${settings.requestId} INITIATED BY ${user.name} REJECTED. No permissions.`)
+        }
+        
         res.status(200).send({
             requestId: settings.requestId
         })

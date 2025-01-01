@@ -1,9 +1,6 @@
 const docdb = require("../utils/docdb")
 const { extend, keys, isFunction } = require("lodash")
 
-// const db = require("../../.config/sparrow-clinic").docdb
-
-
 let CACHE = {}
 let COLLECTIONS = {}
 

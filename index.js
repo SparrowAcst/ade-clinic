@@ -62,7 +62,6 @@ module.exports = {
 
         /////////////////////////////////////////////////////////////////////////////////
 
-
         const Uploader = require("./src/routes/files")
 
         router.get("/file/fileid", Uploader.getFileId)
@@ -85,13 +84,17 @@ module.exports = {
 
         const test = require("./src/routes/test")
         const externalWorkflow = require("./src/utils/external-workflow")
-        await externalWorkflow.getConsumer("submitExaminationReport")
-
-        router.get("/test/messages", test.getMessages)
-        router.get("/test/messages/:requestId", test.getMessages)
-        router.post("/test/send", test.send)
         
+        const consumer = await externalWorkflow.getConsumer("submitExaminationReport")
+        
+        consumer.on("message", message => {
+            console.log("MS MESSAGE: ", message)
+        })
 
+        // router.get("/test/messages", test.getMessages)
+        // router.get("/test/messages/:requestId", test.getMessages)
+        // router.post("/test/send", test.send)
+     
         /////////////////////////////////////////////////////////////////////////////////////
         return router
     }

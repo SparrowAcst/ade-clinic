@@ -88,7 +88,11 @@ module.exports = {
         const consumer = await externalWorkflow.getConsumer("submitExaminationReport")
         
         consumer.on("message", message => {
-            console.log("MS MESSAGE: ", message)
+            console.log("MS MESSAGE: ", JSON.parse(message.toString()))
+        })
+
+        consumer.on("error", error => {
+            console.log("MS ERROR: ", error.toString())
         })
 
         // router.get("/test/messages", test.getMessages)

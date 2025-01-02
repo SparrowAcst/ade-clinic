@@ -3,6 +3,8 @@ const { extend, keys, isFunction } = require("lodash")
 
 let CACHE = {}
 let COLLECTIONS = {}
+const config = require("../../.config/ade-clinic")
+const CLINIC_DATABASE = config.CLINIC_DATABASE
 
 
 const init = async collections => {
@@ -19,7 +21,7 @@ const init = async collections => {
     for (const cacheProperty of cacheProperties) {
 
         CACHE[cacheProperty] = await docdb.aggregate({
-            db:"CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.${COLLECTIONS[cacheProperty].collection}`,
             pipeline: [{
                 $project: {
@@ -28,10 +30,10 @@ const init = async collections => {
             }, ]
         })
 
-        if(COLLECTIONS[cacheProperty].mapper && isFunction(COLLECTIONS[cacheProperty].mapper)){
-            CACHE[cacheProperty] = CACHE[cacheProperty].map(d =>  COLLECTIONS[cacheProperty].mapper(d))
+        if (COLLECTIONS[cacheProperty].mapper && isFunction(COLLECTIONS[cacheProperty].mapper)) {
+            CACHE[cacheProperty] = CACHE[cacheProperty].map(d => COLLECTIONS[cacheProperty].mapper(d))
         }
-        
+
         console.log(`Load ${CACHE[cacheProperty].length} items from sparrow-clinic.${COLLECTIONS[cacheProperty].collection} as ${cacheProperty}`)
         res.push(`Load ${CACHE[cacheProperty].length} items from sparrow-clinic.${COLLECTIONS[cacheProperty].collection} as ${cacheProperty}`)
     }
@@ -54,9 +56,9 @@ const handler = async (req, res, next) => {
 
     const cache = CACHE
 
-    req.body = extend(req.body, { cache})
-    req.params = extend(req.params, {cache})
-    req.query = extend(req.query, {cache})
+    req.body = extend(req.body, { cache })
+    req.params = extend(req.params, { cache })
+    req.query = extend(req.query, { cache })
     req.dbCache = cache
 
     next()
@@ -70,5 +72,3 @@ module.exports = {
         return handler
     }
 }
-
-

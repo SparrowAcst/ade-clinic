@@ -25,9 +25,7 @@ const fs = require("fs")
 const fsp = require("fs").promises
 
 const s3Bucket = require("../utils/s3-bucket")
-
 const dataService = require("../utils/stethophone-data-service")
-
 const externalWorkflow = require("../utils/external-workflow")
 
 const initMigrateExamination = async settings => {
@@ -40,7 +38,7 @@ const initMigrateExamination = async settings => {
 const config = require("../../.config/ade-clinic")
 
 const TEMP_UPLOAD_DIR = path.resolve(config.UPLOAD_DIR)
-
+const CLINIC_DATABASE = config.CLINIC_DATABASE
 
 const getGrants = async (req, res) => {
     
@@ -110,7 +108,7 @@ const getForms = async (req, res) => {
         const {user, examinationID} = req.body.options
 
         let data = await docdb.aggregate({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
@@ -161,7 +159,7 @@ const lockForms = async (req, res) => {
 
 
         let data = await docdb.aggregate({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
@@ -183,7 +181,7 @@ const lockForms = async (req, res) => {
             data["locked at"] = new Date()
 
             const result = await docdb.replaceOne({
-                db: "CLINIC",
+                db: CLINIC_DATABASE,
                 collection: `sparrow-clinic.forms`,
                 filter: {
                     'examination.patientId': data.examination.patientId
@@ -218,7 +216,7 @@ const unlockForms = async (req, res) => {
 
 
         let data = await docdb.aggregate({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
@@ -240,7 +238,7 @@ const unlockForms = async (req, res) => {
             delete data["locked by"]
             delete data["locked at"]
             const result = await docdb.replaceOne({
-                db: "CLINIC",
+                db: CLINIC_DATABASE,
                 collection: `sparrow-clinic.forms`,
                 filter: {
                     'examination.patientId': data.examination.patientId
@@ -278,7 +276,7 @@ const updateForms = async (req, res) => {
 
 
         const result = await docdb.replaceOne({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.forms`,
             filter: {
                 'examination.patientId': form.examination.patientId
@@ -301,7 +299,7 @@ const updateForms = async (req, res) => {
 const getExaminationList = async (req, res) => {
 
     let availableForms = await docdb.aggregate({
-        db: "CLINIC",
+        db: CLINIC_DATABASE,
         collection: `sparrow-clinic.forms`,
         pipeline: [{
                 '$match': {
@@ -444,12 +442,12 @@ const syncExaminations = async (req, res) => {
             prefixes: grants.patientPrefix
         })
 
-        console.log("--------------------------------> FB", examinations_fb.map(e => e.patientId))
+        // console.log("--------------------------------> FB", examinations_fb.map(e => e.patientId))
 
         let patientRegexp = new RegExp(grants.patientPrefix.map(p => `^${p}`).join("|"))
 
         let examinations_mg = await docdb.aggregate({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.forms`,
             pipeline: [
                 {
@@ -468,11 +466,11 @@ const syncExaminations = async (req, res) => {
             ]
         })
 
-        console.log("--------------------------------> M1", examinations_mg.map(e => e.examination.patientId))
+        // console.log("--------------------------------> M1", examinations_mg.map(e => e.examination.patientId))
 
         let toBeAdded = difference(examinations_fb.map(d => d.patientId), examinations_mg.map(d => d.examination.patientId))
         
-        console.log("---------------------------------- ADD", toBeAdded)
+        // console.log("---------------------------------- ADD", toBeAdded)
 
         toBeAdded = examinations_fb.filter( e => toBeAdded.includes(e.patientId))
         
@@ -484,7 +482,7 @@ const syncExaminations = async (req, res) => {
         }
 
         let availableForms = await docdb.aggregate({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
@@ -551,7 +549,9 @@ const postSubmitOneExamination = async (req, res) => {
         settings.requestId = uuid()
         console.log(`MIGRATE CLINIC DATA REQUEST: ${settings.requestId} INITIATED BY ${user.name}`)
         
-        if(user.submit){
+        console.log("user", user)
+
+        if(user.grants && user.grants.submit){
             req.eventHub.emit("migrate-clinic-data", settings)
         } else {
             console.log(`REQUEST: ${settings.requestId} INITIATED BY ${user.name} REJECTED. No permissions.`)

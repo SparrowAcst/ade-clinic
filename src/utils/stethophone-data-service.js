@@ -14,15 +14,21 @@ const uuid = require("uuid").v4
 const filesize = require("file-size")
 const s3Bucket = require("./s3-bucket")
 const fb = require("./fb")
-
 const docdb = require("./docdb")
+
+const config = require("../../.config/ade-clinic")
+const CLINIC_DATABASE = config.CLINIC_DATABASE
+
+
+
+
 
 const getPatients = async options => {
 
     let { state, prefixes } = options
 
     let lastExamination = await docdb.aggregate({
-        db: "CLINIC",
+        db: CLINIC_DATABASE,
         collection: "sparrow-clinic.external-examinations",
         pipeline: [{
                 $sort: {
@@ -61,7 +67,7 @@ const getPatients = async options => {
 
     if (result.length > 0) {
         await docdb.insertAll({
-            db: "CLINIC",
+            db: CLINIC_DATABASE,
             collection: "sparrow-clinic.external-examinations",
             data: result
         })
@@ -70,7 +76,7 @@ const getPatients = async options => {
     let patientRegexp = new RegExp(prefixes.map(p => `^${p}`).join("|"))
 
     result = await docdb.aggregate({
-        db: "CLINIC",
+        db: CLINIC_DATABASE,
         collection: `sparrow-clinic.external-examinations`,
         pipeline: [{
                 $match: {

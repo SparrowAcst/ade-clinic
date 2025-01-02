@@ -6,7 +6,6 @@ let CONFIG = require("../../.config/ade-clinic/docdb/docdb.conf")
 
 let clients = 0
 
-
 const normalize = str => {
     const d = str.split(".")
     return {
@@ -23,6 +22,7 @@ const createClient = async options => {
     })
 
     return client
+    
 }
 
 

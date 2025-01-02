@@ -397,8 +397,6 @@ const expandExaminations = async (...examinations) => {
 
         try {
 
-            console.log(examination)
-
             const docRef = FB_DB.collection('examinations').doc(examination.id)
 
             examination.$extention = {

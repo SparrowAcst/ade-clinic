@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 const path = require("path")
-const fsp = require("fs").promises
-const s3bucket = require("../utils/s3-bucket")
 const { keys, sortBy } = require("lodash")
 const uuid = require("uuid").v4
+
+const s3bucket = require("../utils/s3-bucket")
+
 
 const TARGET_DIR = path.resolve(require("../../.config/ade-clinic").UPLOAD_DIR)
 
@@ -148,9 +149,6 @@ const s3PresignedUrl = async (req, res) => {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
 
 module.exports = {
     getFileId,

@@ -1,12 +1,9 @@
 const { extend, isArray } = require("lodash")
 const uuid = require("uuid").v4
 const axios = require("axios")
-const mongodb = require("../utils/mongodb")
+const docdb = require("../utils/docdb")
 
 const AI_SEGMENTATION_API = "https://eu5zfsjntmqmf7o6ycrcxyry4a0rikmc.lambda-url.us-east-1.on.aws/"
-
-const { db } = require("../../.config/ade-import")
-
 
 const transformAI2v2 = data => {
 
@@ -55,10 +52,10 @@ const getAISegmentation = async settings => {
     let result = []
 
     for (let r of records) {
-        console.log("LONG-TERM: getAISegmentation for ", r["Examination ID"], r.model, r["Body Spot"])
+        console.log("LONG-TERM: getAISegmentation for ", r.id, r["Body Spot"], r.model)
         let segmentation = {
             id: uuid(),
-            patientId: r["Examination ID"],
+            recordId: r.id,
             createdAt: new Date(),
             user: {
                 name: "AI"
@@ -74,7 +71,6 @@ const getAISegmentation = async settings => {
                 query = {
                     url: r.Source.url
                 }
-
 
                 let response = await axios({
                     method: "POST",
@@ -117,23 +113,26 @@ const getAISegmentation = async settings => {
 const updateAISegmentation = async settings => {
     
 
-    let { collection, records } = settings
+    let { records, user } = settings
     
-    console.log("LONG-TERM: updateAISegmentation: started")
+    const SCHEMA = user.submit.schema    
+
+    console.log(`LONG-TERM: updateAISegmentation: started on ${SCHEMA}`)
 
 ///////////////////// debug /////////////////////////    
-    // records = records.slice(0,5)
+    // records = records.slice(0,3)
+    // console.log(records)
 /////////////////////////////////////////////////////
 
     let segmentations = await getAISegmentation({records})
     
-    console.log(`LONG-TERM: updateAISegmentation: insert ${segmentations.length} items into ${collection.segmentations}`)
+    // console.log(`LONG-TERM: updateAISegmentation: insert ${segmentations.length} items into ${collection.segmentations}`)
     
-    await mongodb.insertAll({
-        db,
-        collection: collection.segmentations,
-        data: segmentations
-    })
+    // await docdb.insertAll({
+    //     db,
+    //     collection: collection.segmentations,
+    //     data: segmentations
+    // })
 
     let commands = segmentations
         .filter( s => !s.error)
@@ -144,22 +143,22 @@ const updateAISegmentation = async settings => {
                             },
                             update: {
                                 $set:{
-                                    aiSegmentation: s.id
+                                    aiSegmentation: s.data,
                                 }
                             },
                             upsert: true
                         }
     }))
 
-    console.log(`LONG-TERM: updateAISegmentation: update ${commands.length} items in ${collection.labels}`)
+    console.log(`LONG-TERM: updateAISegmentation: update ${commands.length} items in ${SCHEMA}.labels`)
     
     if(segmentations.length > commands.length){
         console.log(`LONG-TERM: updateAISegmentation: no segmentation for`, segmentations.filter(s => s.error))
     }
 
-    await mongodb.bulkWrite({
-                db,
-                collection: collection.labels,
+    await docdb.bulkWrite({
+                db: "TEST", //"ADE",
+                collection: `${SCHEMA}.labels`,
                 commands
             })
      

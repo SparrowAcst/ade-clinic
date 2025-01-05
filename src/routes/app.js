@@ -1,4 +1,4 @@
-const mongodb = require("../utils/mongodb")
+const docdb = require("../utils/docdb")
 const {
     extend,
     sortBy,
@@ -14,25 +14,31 @@ const {
     isUndefined,
     groupBy,
     isString,
-    unionBy
+    unionBy,
+    chunk
 } = require("lodash")
-const moment = require("moment")
+
 const path = require("path")
 const uuid = require("uuid").v4
 const axios = require("axios")
 const fs = require("fs")
 const fsp = require("fs").promises
-const filesize = require("file-size")
 
 const s3Bucket = require("../utils/s3-bucket")
-const fb = require("../utils/fb")
+const dataService = require("../utils/stethophone-data-service")
+const externalWorkflow = require("../utils/external-workflow")
 
-const { transferClinicData } = require("../long-term/transfer-clinic-data")
+const initMigrateExamination = async settings => {
+
+    let publisher = await externalWorkflow.getPublisher("syncExamination")
+    publisher.send(settings)
+
+}    
 
 const config = require("../../.config/ade-clinic")
 
 const TEMP_UPLOAD_DIR = path.resolve(config.UPLOAD_DIR)
-const DB = config.mongodb
+const CLINIC_DATABASE = config.CLINIC_DATABASE
 
 const getGrants = async (req, res) => {
     
@@ -101,9 +107,9 @@ const getForms = async (req, res) => {
 
         const {user, examinationID} = req.body.options
 
-        let data = await mongodb.aggregate({
-            db: DB,
-            collection: `${DB.name}.forms`,
+        let data = await docdb.aggregate({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
                         'examination.patientId': examinationID
@@ -152,9 +158,9 @@ const lockForms = async (req, res) => {
         const { grants, user, examinationID} = req.body.options
 
 
-        let data = await mongodb.aggregate({
-            db: DB,
-            collection: `${DB.name}.forms`,
+        let data = await docdb.aggregate({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
                         'examination.patientId': examinationID
@@ -174,9 +180,9 @@ const lockForms = async (req, res) => {
             data["locked by"] = grants.name
             data["locked at"] = new Date()
 
-            const result = await mongodb.replaceOne({
-                db: DB,
-                collection: `${DB.name}.forms`,
+            const result = await docdb.replaceOne({
+                db: CLINIC_DATABASE,
+                collection: `sparrow-clinic.forms`,
                 filter: {
                     'examination.patientId': data.examination.patientId
                 },
@@ -209,9 +215,9 @@ const unlockForms = async (req, res) => {
         const { user, examinationID } = options
 
 
-        let data = await mongodb.aggregate({
-            db: DB,
-            collection: `${DB.name}.forms`,
+        let data = await docdb.aggregate({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
                         'examination.patientId': examinationID
@@ -231,9 +237,9 @@ const unlockForms = async (req, res) => {
 
             delete data["locked by"]
             delete data["locked at"]
-            const result = await mongodb.replaceOne({
-                db: DB,
-                collection: `${DB.name}.forms`,
+            const result = await docdb.replaceOne({
+                db: CLINIC_DATABASE,
+                collection: `sparrow-clinic.forms`,
                 filter: {
                     'examination.patientId': data.examination.patientId
                 },
@@ -269,9 +275,9 @@ const updateForms = async (req, res) => {
         delete form["locked at"]
 
 
-        const result = await mongodb.replaceOne({
-            db: DB,
-            collection: `${DB.name}.forms`,
+        const result = await docdb.replaceOne({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.forms`,
             filter: {
                 'examination.patientId': form.examination.patientId
             },
@@ -292,9 +298,9 @@ const updateForms = async (req, res) => {
 
 const getExaminationList = async (req, res) => {
 
-    let availableForms = await mongodb.aggregate({
-        db: DB,
-        collection: `${DB.name}.forms`,
+    let availableForms = await docdb.aggregate({
+        db: CLINIC_DATABASE,
+        collection: `sparrow-clinic.forms`,
         pipeline: [{
                 '$match': {
                     'examination.state': "pending"
@@ -400,77 +406,13 @@ const copyFromURLToS3 = async ({ source, target }) => {
 
 }
 
-
-
-
 const syncAssets = async (req, res) => {
 
     try {
         
-        let { examinationID, grants, eid } = req.body.options
-
-        // let assets = await fb.getFbAssets(eid)
-        let assets = await fb.getFbAssets1(examinationID)
-        
-        console.log(assets.files)
-
-
-        assets.files = assets.files.map(a => {
-            a.source = "Stethophone Data"
-            if (a.mimeType == "application/octet-stream") {
-                a.mimeType = "image/jpg"
-                a.name = a.name.replace("octet-stream", "jpg")
-            }
-            if (!a.mimeType) {
-                a.mimeType = "image/jpg"
-                a.name = a.name.replace("undefined", "jpg")
-            }
-            return a
-        })
-
-        let upd = []
-        
-        for (let f of assets.files) {
-
-            let target = `${grants.backup.home}/${examinationID}/FILES/${f.name}`
-            let metadata = await s3Bucket.metadata(target)
-            
-            console.log(f.name, metadata)
-            console.log("target", target)
-
-
-            if (!metadata) {
-
-                await s3Bucket.uploadFromURL({
-                    source: f.url,
-                    target,
-                    callback: (progress) => {
-                        console.log(`UPLOAD ${target}: ${filesize(progress.loaded).human("jedec")} from ${filesize(progress.total).human("jedec")} (${(100*progress.loaded/progress.total).toFixed(1)}%)`)
-                    }
-
-                })
-
-                metadata = await s3Bucket.metadata(target)
-            }
-
-            upd.push({
-                id: uuid(),
-                name: last(metadata.Key.split("/")),
-                publicName: last(metadata.Key.split("/")),
-                path: metadata.Key,
-                mimeType: metadata.ContentType,
-                size: metadata.ContentLength,
-                updatedAt: metadata.LastModified,
-                source: "Stetophone Data",
-                storage: "s3",
-                url: metadata.url,
-                valid: true
-            })
-        }
-
-        assets.files = upd
-
+        let assets = await dataService.getExaminationAssets(req.body.options)
         res.send(assets)
+
     } catch (e) {
         console.log("Sync Assets Error", e.toString(), e.stack, JSON.stringify(req.body))
         throw e
@@ -480,46 +422,6 @@ const syncAssets = async (req, res) => {
 
 
 const syncExaminations = async (req, res) => {
-
-    const prepareForms = async examination => {
-
-        examination = await fb.expandExaminations(...[examination])
-
-        examination = (isArray(examination)) ? examination[0] : examination
-
-        // console.log("examination", examination.$extention.assets)
-
-
-        let formRecords = examination.$extention.forms.map(f => {
-            let res = extend({}, f)
-            res.examinationId = examination.id
-            let key = maxBy(keys(f.data))
-            res.data = res.data[key]
-            res.id = f.id
-            return res
-        })
-
-
-        let form = {}
-        let ftypes = ["patient", "ekg", "echo"]
-        ftypes.forEach(type => {
-            let f = find(formRecords, d => d.type == type)
-            form[type] = (f && f.data) ? f.data.en : {}
-
-        })
-
-        form.examination = {
-            "id": examination.id,
-            "dateTime": examination.dateTime,
-            "patientId": examination.patientId,
-            "comment": examination.comment,
-            "state": examination.state
-        }
-
-        return form
-
-    }
-
 
     try {
 
@@ -535,33 +437,25 @@ const syncExaminations = async (req, res) => {
             return
         }
 
-        // console.log("--------------------------------< FB")
+        let examinations_fb = await dataService.getPatients({
+            state: "pending",
+            prefixes: grants.patientPrefix
+        })
 
-        let examinations_fb = await fb.getCollectionItems(
-            "examinations",
-            [
-                ["state", "==", "pending"]
-            ]
-        )
+        // console.log("--------------------------------> FB", examinations_fb.map(e => e.patientId))
 
-        // console.log("--------------------------------> FB")
+        let patientRegexp = new RegExp(grants.patientPrefix.map(p => `^${p}`).join("|"))
 
-        
-        examinations_fb = examinations_fb.filter(e => grants.patientPrefix.map(p => e.patientId.startsWith(p)).reduce((a, b) => a || b, false))
-
-        // console.log("examinations_fb", examinations_fb)
-
-        // console.log("--------------------------------< M1")
-
-        let examinations_mg = await mongodb.aggregate({
-            db: DB,
-            collection: `${DB.name}.forms`,
+        let examinations_mg = await docdb.aggregate({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.forms`,
             pipeline: [
                 {
                     '$match': {
-                        // 'examination.state': {
-                        //     $in: ["pending", "submited"]
-                        // }    
+                        'examination.state': "pending",
+                        "examination.patientId":{
+                            $regex: patientRegexp
+                        }
                     }
                 },
                 {
@@ -572,25 +466,13 @@ const syncExaminations = async (req, res) => {
             ]
         })
 
-        // console.log("--------------------------------> M1")
-
-
-        examinations_mg = examinations_mg.filter(e => grants.patientPrefix.map(p => e.examination.patientId.startsWith(p)).reduce((a, b) => a || b, false))
-
-        // console.log("examinations_mg", examinations_mg)
+        // console.log("--------------------------------> M1", examinations_mg.map(e => e.examination.patientId))
 
         let toBeAdded = difference(examinations_fb.map(d => d.patientId), examinations_mg.map(d => d.examination.patientId))
-        let toBeLocked = difference(examinations_mg.map(d => d.examination.patientId), examinations_fb.map(d => d.patientId))
+        
+        // console.log("---------------------------------- ADD", toBeAdded)
 
-        let availablePatents = unionBy(
-            examinations_mg.map(d => d.examination.patientId), 
-            examinations_fb.map(d => d.patientId)
-        )
-
-        toBeAdded = examinations_fb.filter(e => {
-            return toBeAdded.includes(e.patientId)
-        })
-
+        toBeAdded = examinations_fb.filter( e => toBeAdded.includes(e.patientId))
         
         console.log("FB", examinations_fb.map(d => `${d.patientId}:${d.state}`))
         console.log("MG", examinations_mg.map(d => `${d.examination.patientId}:${d.examination.state}`))
@@ -600,65 +482,20 @@ const syncExaminations = async (req, res) => {
 
 
         let forms = []
-
-        for (let i = 0; i < toBeAdded.length; i++) {
-            let exam = toBeAdded[i]
-            let form = await prepareForms(exam)
-            forms.push(form)
-        }
-
-        if (forms.length > 0) {
-
-            let replaceCommands = forms.map( form => ({
-                replaceOne: {
-                    "filter": { 'examination.patientId': form.examination.patientId },
-                    "replacement": form,
-                    "upsert": true
-                }
-            }))
-
-            await mongodb.bulkWrite({
-                db: DB,
-                collection: `${DB.name}.forms`,
-                commands: replaceCommands
-            })
-
-        }
-
-        toBeLocked = examinations_mg.filter(e => toBeLocked.includes(e.patientId))
-
-        if(toBeLocked.length > 0){
-            let replaceCommands = forms.map( form => ({
-                updateOne: {
-                    "filter": { 'examination.patientId': form.examination.patientId },
-                    "update": { 
-                        $set: { 
-                            "examination.state": "locked"
-                        }
-                    }
-                }
-            }))
-
-            await mongodb.bulkWrite({
-                db: DB,
-                collection: `${DB.name}.forms`,
-                commands: replaceCommands
-            })
-        }
         
-        // let availablePatents = examinations_fb.map(f => f.patientId)
+        for( let exam of toBeAdded){
+           let form = await dataService.getExaminationForms(exam)
+           forms.push(form)     
+        }
 
-        
-        let availableForms = await mongodb.aggregate({
-            db: DB,
-            collection: `${DB.name}.forms`,
+        let availableForms = await docdb.aggregate({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.forms`,
             pipeline: [{
                     '$match': {
-                        'examination.state': {
-                            $ne: "finalized"
-                        },
-                        "examination.patientId": {
-                            $in: availablePatents
+                        'examination.state': "pending",
+                        "examination.patientId":{
+                            $regex: patientRegexp
                         }
                     }
                 },
@@ -692,7 +529,6 @@ const syncExaminations = async (req, res) => {
         console.log("Sync Examinations for", user.name,  "availablePatents:", availableForms.map( d => d["Patient ID"]))
 
         res.send(availableForms)
-        // console.log("--------------------------------> DONE")
 
     } catch (e) {
         res.send({
@@ -714,25 +550,25 @@ const postSubmitOneExamination = async (req, res) => {
         
         let grants = find(users, u => u.email.includes(user.email))
         settings.user = grants
-
-        if (req.eventHub.listenerCount("transfer-clinic-data") == 0) {
-            req.eventHub.on("transfer-clinic-data", transferClinicData)
+            
+        if (req.eventHub.listenerCount("migrate-clinic-data") == 0) {
+            req.eventHub.on("migrate-clinic-data", initMigrateExamination) 
         }
 
+        settings.requestId = uuid()
+        console.log(`MIGRATE CLINIC DATA REQUEST: ${settings.requestId} INITIATED BY ${user.name}`)
+        
+        console.log("user", user)
 
-        await mongodb.updateOne({
-            db: DB,
-            collection: `${DB.name}.forms`,
-            filter:{"examination.patientId": patientId},
-            data: {
-                "examination.state": "finalized",
-                "status": "finalized"
-            }
+        if(user.grants && user.grants.submit){
+            req.eventHub.emit("migrate-clinic-data", settings)
+        } else {
+            console.log(`REQUEST: ${settings.requestId} INITIATED BY ${user.name} REJECTED. No permissions.`)
+        }
+        
+        res.status(200).send({
+            requestId: settings.requestId
         })
-
-        req.eventHub.emit("transfer-clinic-data", settings)
-
-        res.status(200).send()
 
     } catch (e) {
         res.status(500).send(e.toString() + e.stack)

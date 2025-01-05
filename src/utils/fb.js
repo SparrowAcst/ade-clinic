@@ -26,13 +26,13 @@ const selectData = async (collectionName, selector) => {
         selector = selector || []
 
         // if (collections.includes(collectionName.split("/")[0])) {
-            let query = FB_DB.collection(collectionName)
-            selector.forEach(s => {
-                if (s && s.length == 3) query = query.where(...s)
-            })
+        let query = FB_DB.collection(collectionName)
+        selector.forEach(s => {
+            if (s && s.length == 3) query = query.where(...s)
+        })
 
-            const querySnapshot = await query.get();
-            return querySnapshot.docs
+        const querySnapshot = await query.get();
+        return querySnapshot.docs
             .map((doc) => ({
                 id: doc.id,
                 ...doc.data()
@@ -51,33 +51,33 @@ const getCollectionItems = async (collectionName, selector) => {
         selector = selector || []
 
         // if (collections.includes(collectionName.split("/")[0])) {
-            let query = FB_DB.collection(collectionName)
-            selector.forEach(s => {
-                if (s && s.length == 3) query = query.where(...s)
-            })
+        let query = FB_DB.collection(collectionName)
+        selector.forEach(s => {
+            if (s && s.length == 3) query = query.where(...s)
+        })
 
-            const querySnapshot = await query.get();
-            return querySnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            }))
+        const querySnapshot = await query.get();
+        return querySnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data()
+        }))
         // } else {
-            // console.log("selector", selector, collectionName)
-            // let query = FB_DB.collectionGroup(collectionName)
-            
-            // selector.forEach(s => {
-            //     if (s && s.length == 3) query = query.where(...s)
-            // })
-            // console.log("query", query)
-            // const querySnapshot = await query.get();
-            
-            // console.log("querySnapshot", querySnapshot)
+        // console.log("selector", selector, collectionName)
+        // let query = FB_DB.collectionGroup(collectionName)
 
-            // return querySnapshot.docs.map(doc => ({
-            //     id: doc.id,
-            //     path: doc._ref._path.segments,
-            //     ...doc.data()
-            // }))
+        // selector.forEach(s => {
+        //     if (s && s.length == 3) query = query.where(...s)
+        // })
+        // console.log("query", query)
+        // const querySnapshot = await query.get();
+
+        // console.log("querySnapshot", querySnapshot)
+
+        // return querySnapshot.docs.map(doc => ({
+        //     id: doc.id,
+        //     path: doc._ref._path.segments,
+        //     ...doc.data()
+        // }))
         // }
     } catch (e) {
         console.log(e.toString())
@@ -108,6 +108,18 @@ const uploadFile = async (filepath, filename) => {
         console.log('Retry');
         return uploadFile(filepath, filename);
     }
+
+}
+
+
+const getSignedUrl = async filename => {
+
+    const file = bucket.file(filename)
+    let res = await file.getSignedUrl({
+        action: 'read',
+        expires: new Date().setFullYear(new Date().getFullYear() + 2)
+    })
+    return res[0]
 
 }
 
@@ -236,10 +248,10 @@ const getFbAssets = async examinationId => {
                 id: a.id,
                 valid: a.links.valid,
                 device: a.device,
-                deviceDescription:a.deviceDescription || "",
+                deviceDescription: a.deviceDescription || "",
                 Source: {
-                  path: (a.links) ? a.links.path : undefined,
-                  url: (a.links) ? a.links.url : undefined,
+                    path: (a.links) ? a.links.path : undefined,
+                    url: (a.links) ? a.links.url : undefined,
                 },
                 bodyPosition: (record) ? record.bodyPosition : "",
                 spot: (recordPoint) ? recordPoint.spot : "",
@@ -265,7 +277,7 @@ const getFbAssets = async examinationId => {
             url: a.links.url,
             valid: a.links.valid
         }))
-   
+
     return {
         recordings,
         files
@@ -280,20 +292,21 @@ const getFbAssets1 = async patientId => {
         ...doc.data()
     })
 
-    let docs = await selectData("examinations", [["patientId", "==", patientId]])
+    let docs = await selectData("examinations", [
+        ["patientId", "==", patientId]
+    ])
     let assets = []
     let recordPoints = []
     let records = []
-    for( const doc of docs ) {
-        console.log("-------------------------> DOC", doc.id)   
+    for (const doc of docs) {
+        console.log("-------------------------> DOC", doc.id)
         const docRef = FB_DB.collection('examinations').doc(doc.id)
-    
+
         assets = assets.concat((await docRef.collection('assets').get()).docs.map(docMapper))
         recordPoints = recordPoints.concat((await docRef.collection('recordPoints').get()).docs.map(docMapper))
         records = records.concat((await docRef.collection('records').get()).docs.map(docMapper))
     }
-    
-    assets = assets.filter(d => d.links)
+
     assets = uniqBy(assets, d => d.links.path)
 
     for (let i = 0; i < assets.length; i++) {
@@ -321,10 +334,10 @@ const getFbAssets1 = async patientId => {
                 id: a.id,
                 valid: a.links.valid,
                 device: a.device,
-                deviceDescription:a.deviceDescription || "",
+                deviceDescription: a.deviceDescription || "",
                 Source: {
-                  path: (a.links) ? a.links.path : undefined,
-                  url: (a.links) ? a.links.url : undefined,
+                    path: (a.links) ? a.links.path : undefined,
+                    url: (a.links) ? a.links.url : undefined,
                 },
                 date: a.timestamp,
                 bodyPosition: (record) ? record.bodyPosition : "",
@@ -351,7 +364,7 @@ const getFbAssets1 = async patientId => {
             url: a.links.url,
             valid: a.links.valid
         }))
-   
+
     return {
         recordings,
         files
@@ -363,57 +376,47 @@ const getFbAssets1 = async patientId => {
 const getOrganization = async id => {
 
     const docMapper = doc => ({
-          id: doc.id,
-          ...doc.data()
-      })
-  
+        id: doc.id,
+        ...doc.data()
+    })
+
     return docMapper((await FB_DB.collection('organizations').doc(id).get()))
-} 
+}
 
 
 const expandExaminations = async (...examinations) => {
-  
-  const docMapper = doc => ({
-      id: doc.id,
-      ...doc.data()
-  })
-  
-  examinations = examinations || []
 
-  for(let i=0; i < examinations.length; i++){
-    try {
-      
-      let examination = examinations[i]
-      examination.$extention = {}
-      
-      if(examination.userId){
-      
-        let users = FB_DB.collection('users');
-        examination.$extention.users = (await users.where("userId","==",examination.userId).get() ).docs.map(docMapper)
-        if(examination.$extention.users[0]){
-          let organizations = FB_DB.collection('organizations');
-          examination.$extention.organizations = 
-            [docMapper((await organizations.doc(examination.$extention.users[0].organization).get() ))]
+    const docMapper = doc => ({
+        id: doc.id,
+        ...doc.data()
+    })
+
+    examinations = examinations || []
+
+    for (let examination of examinations) {
+
+        try {
+
+            const docRef = FB_DB.collection('examinations').doc(examination.id)
+
+            examination.$extention = {
+
+                forms: (await docRef.collection('forms').get()).docs.map(docMapper),
+                recordPoints: (await docRef.collection('recordPoints').get()).docs.map(docMapper),
+                records: (await docRef.collection('records').get()).docs.map(docMapper),
+                assets: (await docRef.collection('assets').get()).docs.map(docMapper).filter(a => !!a.links)
+
+            }
+
+        } catch (e) {
+
+            console.log("expandExaminations", e.toString(), e.stack)
+            throw (e)
+
         }
-      
-      } 
-      
-      let exams = FB_DB.collection('examinations');
-        const docRef = exams.doc(examination.id)
-
-      examination.$extention.forms = ( await docRef.collection('forms').get() ).docs.map(docMapper)
-      examination.$extention.recordPoints = ( await docRef.collection('recordPoints').get() ).docs.map(docMapper)
-      examination.$extention.records = ( await docRef.collection('records').get() ).docs.map(docMapper)
-      examination.$extention.assets = ( await docRef.collection('assets').get() ).docs.map(docMapper)
-      examination.$extention.assets = examination.$extention.assets.filter( a => !!a.links) 
-
-    } catch (e) {
-      logger.info("ERROR")
-      logger.info(e.toString())
     }
-  }
 
-  return examinations
+    return examinations
 
 }
 
@@ -422,13 +425,13 @@ const expandExaminations = async (...examinations) => {
 
 
 module.exports = {
-  db: FB_DB,
-  getCollectionItems,
-  getFbAssets,
-  getFbAssets1,
-  
-  expandExaminations,
-  getOrganization
+    db: FB_DB,
+    getCollectionItems,
+    getFbAssets,
+    getFbAssets1,
+    getSignedUrl,
+    expandExaminations,
+    getOrganization
 }
 
 

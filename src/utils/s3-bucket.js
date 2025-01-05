@@ -31,6 +31,10 @@ const {
     DeleteObjectsCommand,
     waitUntilObjectNotExists,
 
+    CopyObjectCommand,
+    ObjectNotInActiveTierError,
+    waitUntilObjectExists,
+
     S3Client
 
 } = require("@aws-sdk/client-s3");
@@ -342,6 +346,42 @@ const uploadChunks = async ({
     }
 }
 
+const copyObject = async ({
+    sourceBucketAlias,
+    source,
+    destinationBucketAlias,
+    destination
+}) => {
+
+    try {
+
+    
+    let sourceBucket = settings.bucket[sourceBucketAlias] || settings.bucket["default"]
+    let destinationBucket = settings.bucket[destinationBucketAlias] || settings.bucket["default"]
+    
+        await client.send(
+            new CopyObjectCommand({
+                CopySource: `${sourceBucket}/${source}`,
+                Bucket: destinationBucket,
+                Key: destination,
+            }),
+        );
+        await waitUntilObjectExists({ client }, { Bucket: destinationBucket, Key: destination }, );
+        // console.log(
+        //     `Successfully copied ${sourceBucket}/${sourceKey} to ${destinationBucket}/${destinationKey}`,
+        // );
+    } catch (caught) {
+        if (caught instanceof ObjectNotInActiveTierError) {
+            console.error(
+                `Could not copy ${source} from ${sourceBucket}. Object is not in the active tier.`,
+            );
+        } else {
+            throw caught;
+        }
+    }
+}
+
+
 
 module.exports = {
     list,
@@ -352,7 +392,8 @@ module.exports = {
     uploadLt20M,
     uploadChunks,
     deleteFiles,
-    uploadFromURL
+    uploadFromURL,
+    copyObject
 }
 
 // const run = async () => {

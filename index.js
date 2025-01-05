@@ -16,19 +16,33 @@ module.exports = {
 
         }
 
-        const DBCache = await preloadedCache.init({
+        const { RELOAD, PRELOAD, WRITEBACK, LIST } = await preloadedCache.init({
+            
             users: {
                 collection: "users",
+                writeback: {
+                    identity: "name"
+                }
             },
+
             usersDev: {
                 collection: "users-dev",
             },
+
             organizations: {
-                collection: "organizations"
+                collection: "organizations",
+                writeback: {
+                    identity: "id"
+                }
             },
+
             rules: {
-                collection: "validation-rules"
+                collection: "validation-rules",
+                writeback: {
+                    identity: "name"
+                }
             },
+
             i18n: {
                 collection: "i18n",
                 mapper: d => {
@@ -38,27 +52,33 @@ module.exports = {
             }
         })
 
+
+
         ////////////////////////////////////////////////////////////////////////////
 
-        router.get("/admin/cache-update/", DBCache)
+        router.get("/admin/cache/reload/", [RELOAD])
+        router.post("/admin/cache/update/", [authorize, WRITEBACK])
+        router.post("/admin/cache/:entity", [authorize, WRITEBACK])
+        router.get("/admin/cache/:entity", [authorize, LIST])
+                
 
         ////////////////////////////////////////////////////////////////////////////
 
         const App = require("./src/routes/app")
 
-        router.post("/get-grants/", [authorize, DBCache, App.getGrants])
-        router.post("/get-forms/", [authorize, DBCache, App.getForms])
-        router.post("/get-list/", [authorize, DBCache, App.getExaminationList])
+        router.post("/get-grants/", [authorize, PRELOAD, App.getGrants])
+        router.post("/get-forms/", [authorize, PRELOAD, App.getForms])
+        router.post("/get-list/", [authorize, PRELOAD, App.getExaminationList])
 
-        router.post("/update-forms/", [authorize, DBCache, App.updateForms])
-        router.post("/sync-forms/", [authorize, DBCache, App.syncExaminations])
-        router.post("/lock-forms/", [authorize, DBCache, App.lockForms])
-        router.post("/unlock-forms/", [authorize, DBCache, App.unlockForms])
+        router.post("/update-forms/", [authorize, PRELOAD, App.updateForms])
+        router.post("/sync-forms/", [authorize, PRELOAD, App.syncExaminations])
+        router.post("/lock-forms/", [authorize, PRELOAD, App.lockForms])
+        router.post("/unlock-forms/", [authorize, PRELOAD, App.unlockForms])
 
-        router.post("/sync-assets/", [authorize, DBCache, App.syncAssets])
+        router.post("/sync-assets/", [authorize, PRELOAD, App.syncAssets])
 
-        router.post("/get-rules/", [authorize, DBCache, App.getRules])
-        router.post("/submit/", [authorize, DBCache, App.postSubmitOneExamination])
+        router.post("/get-rules/", [authorize, PRELOAD, App.getRules])
+        router.post("/submit/", [authorize, PRELOAD, App.postSubmitOneExamination])
 
         /////////////////////////////////////////////////////////////////////////////////
 
@@ -77,8 +97,8 @@ module.exports = {
 
         const I18n = require("./src/routes/i18n")
 
-        router.get("/i18n", [authorize, DBCache, I18n.getLocale])
-        router.get("/i18n/md5", [authorize, DBCache, I18n.getLocaleMd5])
+        router.get("/i18n", [authorize, PRELOAD, I18n.getLocale])
+        router.get("/i18n/md5", [authorize, PRELOAD, I18n.getLocaleMd5])
 
         /////////////////////////////////////////////////////////////////////////////////////
 
@@ -95,11 +115,18 @@ module.exports = {
             console.log("MS ERROR: ", error.toString())
         })
 
-        // router.get("/test/messages", test.getMessages)
-        // router.get("/test/messages/:requestId", test.getMessages)
-        // router.post("/test/send", test.send)
-     
+        
         /////////////////////////////////////////////////////////////////////////////////////
+        
+        const adeClinicDataManagement = require("./src/routes/clinic-data-management")
+        router.post("/cdm/get-exams/", [authorize, PRELOAD, adeClinicDataManagement.getExams])
+        router.post("/cdm/get-state-chart/", [authorize, PRELOAD, adeClinicDataManagement.getStateChart])
+        router.post("/cdm/accept-examinations/", [authorize, PRELOAD, adeClinicDataManagement.acceptExaminations])
+        router.post("/cdm/reject-examinations/", [authorize, PRELOAD, adeClinicDataManagement.rejectExaminations])
+
+
+
+
         return router
     }
 }

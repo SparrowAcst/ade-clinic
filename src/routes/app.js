@@ -58,6 +58,8 @@ const getGrants = async (req, res) => {
             return
         }
 
+        grants = JSON.parse(JSON.stringify(grants))
+
         if (!isUndefined(examinationID)) {
             if (grants.patientPrefix.filter(d => examinationID.startsWith(d)).length == 0) {
                 grants.role = "reader"

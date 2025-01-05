@@ -47,6 +47,8 @@ const getGrants = async (req, res) => {
         const { user, examinationID } = req.body.options 
         const { users } = req.body.cache
         
+        console.log(user, examinationID)
+
         let grants = find(users, u => u.email.includes(user.email))
 
         if (!grants) {

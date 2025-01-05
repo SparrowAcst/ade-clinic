@@ -474,13 +474,6 @@ const syncExaminations = async (req, res) => {
 
         toBeAdded = examinations_fb.filter( e => toBeAdded.includes(e.patientId))
         
-        console.log("FB", examinations_fb.map(d => `${d.patientId}:${d.state}`))
-        console.log("MG", examinations_mg.map(d => `${d.examination.patientId}:${d.examination.state}`))
-        console.log("toBeAdded", toBeAdded)
-        console.log("toBeLocked", toBeLocked)
-
-
-
         let forms = []
         
         for( let exam of toBeAdded){
@@ -526,8 +519,6 @@ const syncExaminations = async (req, res) => {
             ]
         })
 
-        console.log("Sync Examinations for", user.name,  "availablePatents:", availableForms.map( d => d["Patient ID"]))
-
         res.send(availableForms)
 
     } catch (e) {
@@ -545,7 +536,7 @@ const postSubmitOneExamination = async (req, res) => {
     try {
 
         const { settings } = req.body
-        let { user, patientId } = settings 
+        let { user } = settings 
         const { users } = req.body.cache
         
         let grants = find(users, u => u.email.includes(user.email))

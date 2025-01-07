@@ -47,7 +47,7 @@ const getGrants = async (req, res) => {
         const { user, examinationID } = req.body.options 
         const { users } = req.body.cache
         
-        console.log(user, examinationID)
+        // console.log(user, examinationID)
 
         let grants = find(users, u => u.email.includes(user.email))
 
@@ -441,49 +441,41 @@ const syncExaminations = async (req, res) => {
             return
         }
 
-        let examinations_fb = await dataService.getPatients({
+
+
+        let toBeAdded = await dataService.getPatients({
             state: "pending",
             prefixes: grants.patientPrefix
         })
 
-        // console.log("--------------------------------> FB", examinations_fb.map(e => e.patientId))
-
-        let patientRegexp = new RegExp(grants.patientPrefix.map(p => `^${p}`).join("|"))
-
-        let examinations_mg = await docdb.aggregate({
-            db: CLINIC_DATABASE,
-            collection: `sparrow-clinic.forms`,
-            pipeline: [
-                {
-                    '$match': {
-                        'examination.state': "pending",
-                        "examination.patientId":{
-                            $regex: patientRegexp
-                        }
-                    }
-                },
-                {
-                    '$project': {
-                        '_id': 0
-                    }
-                }
-            ]
-        })
-
-        // console.log("--------------------------------> M1", examinations_mg.map(e => e.examination.patientId))
-
-        let toBeAdded = difference(examinations_fb.map(d => d.patientId), examinations_mg.map(d => d.examination.patientId))
-        
-        // console.log("---------------------------------- ADD", toBeAdded)
-
-        toBeAdded = examinations_fb.filter( e => toBeAdded.includes(e.patientId))
-        
+        console.log("----> ADD", toBeAdded.map(d => d.patientId))
         let forms = []
         
         for( let exam of toBeAdded){
            let form = await dataService.getExaminationForms(exam)
            forms.push(form)     
         }
+
+
+        if (forms.length > 0) {
+
+            let replaceCommands = forms.map( form => ({
+                replaceOne: {
+                    "filter": { 'examination.patientId': form.examination.patientId },
+                    "replacement": form,
+                    "upsert": true
+                }
+            }))
+
+            await docdb.bulkWrite({
+                db: CLINIC_DATABASE,
+                collection: `sparrow-clinic.forms`,
+                commands: replaceCommands
+            })
+
+        }
+
+        let patientRegexp = new RegExp((grants.patientPrefix || []).map(p => `^${p}`).join("|"))
 
         let availableForms = await docdb.aggregate({
             db: CLINIC_DATABASE,

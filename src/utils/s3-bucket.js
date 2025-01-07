@@ -116,7 +116,7 @@ const metadata = async target => {
             Metadata
         }
     } catch (e) {
-        console.error("s3-bucket.metadata:", e.toString(), e.stack)
+        // console.error("s3-bucket.metadata:", e.toString(), e.stack)
         // throw e
     }
 }

@@ -4,8 +4,10 @@ const {
     find,
     isArray,
     maxBy,
+    minBy,
     keys,
-    last
+    last,
+    flatten
 
 } = require("lodash")
 
@@ -47,7 +49,7 @@ const getPatients = async options => {
     })
 
     let lastDate = (lastExamination[0]) ? lastExamination[0].dateTime : undefined
-
+    // console.log(lastDate)
     let result
 
     if (lastDate) {
@@ -75,61 +77,107 @@ const getPatients = async options => {
 
     let patientRegexp = new RegExp(prefixes.map(p => `^${p}`).join("|"))
 
-    result = await docdb.aggregate({
+    let dateTimes = await docdb.aggregate({
         db: CLINIC_DATABASE,
-        collection: `sparrow-clinic.external-examinations`,
+        collection: "sparrow-clinic.forms",
         pipeline: [{
                 $match: {
-                    state: state,
-                    patientId: {
-                        $regex: patientRegexp
-                    }
-                }
+                    "examination.patientId": {
+                        $regex: patientRegexp,
+                    },
+                },
             },
             {
-                $project: {
-                    _id: 0
-                }
-            }
+                $addFields: {
+                    prefix: {
+                        $substr: [
+                            "$examination.patientId",
+                            0,
+                            3,
+                        ],
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: "$prefix",
+                    dateTime: {
+                        $max: "$examination.dateTime",
+                    },
+                },
+            },
         ]
     })
 
-    return result
+    console.log(dateTimes)
+    
+    result = flatten(
+        (await Promise.all(dateTimes.map( d => 
+                docdb.aggregate({
+                    db: CLINIC_DATABASE,
+                    collection: `sparrow-clinic.external-examinations`,
+                    pipeline: [{
+                            $match: {
+                                state: state,
+                                patientId: {
+                                    $regex: d._id
+                                },
+                                "dateTime":{
+                                    $gt: d.dateTime
+                                }
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 0
+                            }
+                        }
+                    ]
+                })
+            )
+        ))
+    )
 
+    return result
 }
 
 
 const getExaminationForms = async examination => {
 
-    examination = await fb.expandExaminations(...[examination])
+    // examination = await fb.expandExaminations(...[examination])
 
-    examination = (isArray(examination)) ? examination[0] : examination
+    // examination = (isArray(examination)) ? examination[0] : examination
 
-    let formRecords = examination.$extention.forms.map(f => {
-        let res = extend({}, f)
-        res.examinationId = examination.id
-        let key = maxBy(keys(f.data))
-        res.data = res.data[key]
-        res.id = f.id
-        return res
-    })
+    // let formRecords = examination.$extention.forms.map(f => {
+    //     let res = extend({}, f)
+    //     res.examinationId = examination.id
+    //     let key = maxBy(keys(f.data))
+    //     res.data = res.data[key]
+    //     res.id = f.id
+    //     return res
+    // })
 
 
-    let form = {}
-    let ftypes = ["patient", "ekg", "echo"]
-    ftypes.forEach(type => {
-        let f = find(formRecords, d => d.type == type)
-        form[type] = (f && f.data) ? f.data.en : {}
+    // let form = {}
+    // let ftypes = ["patient", "ekg", "echo"]
+    // ftypes.forEach(type => {
+    //     let f = find(formRecords, d => d.type == type)
+    //     form[type] = (f && f.data) ? f.data.en : {}
 
-    })
+    // })
 
-    form.examination = {
-        "id": examination.id,
-        "dateTime": examination.dateTime,
-        "patientId": examination.patientId,
-        "comment": examination.comment,
-        "state": examination.state
-    }
+    form = {
+        patient: {},                                                                                                            
+        ekg: {},                                                                                                                
+        echo: {}, 
+        examination: {
+            "id": examination.id,
+            "dateTime": examination.dateTime,
+            "patientId": examination.patientId,
+            "comment": examination.comment,
+            "state": examination.state
+        }
+    }    
 
     return form
 

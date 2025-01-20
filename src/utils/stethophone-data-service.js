@@ -249,7 +249,7 @@ const getExaminationAssets = async options => {
         return assets
 
     } catch (e) {
-        console.log("Get Examination Assets Error", e.toString(), e.stack, JSON.stringify(req.body))
+        console.log("Get Examination Assets Error", e.toString(), e.stack)
         throw e
     }
 

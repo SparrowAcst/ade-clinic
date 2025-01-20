@@ -307,7 +307,10 @@ const getFbAssets1 = async patientId => {
         records = records.concat((await docRef.collection('records').get()).docs.map(docMapper))
     }
 
-    assets = uniqBy(assets, d => d.links.path)
+    console.log("ASSETS", assets)
+
+
+    assets = uniqBy(assets.filter(d => d.links), d => d.links.path)
 
     for (let i = 0; i < assets.length; i++) {
         if (assets[i].links) {

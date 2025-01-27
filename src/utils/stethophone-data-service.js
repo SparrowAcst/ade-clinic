@@ -215,7 +215,7 @@ const getExaminationAssets = async options => {
             console.log(f.name, metadata)
             console.log("target", target)
 
-            if (!metadata) {
+            // if (!metadata) {
 
                 await s3Bucket.uploadFromURL({
                     source: f.url,
@@ -227,7 +227,7 @@ const getExaminationAssets = async options => {
                 })
 
                 metadata = await s3Bucket.metadata(target)
-            }
+            // }
 
             updtedAssets.push({
                 id: uuid(),

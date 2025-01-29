@@ -110,9 +110,11 @@ const getPatients = async options => {
     })
 
     console.log(dateTimes)
-    
-    result = flatten(
-        (await Promise.all(dateTimes.map( d => 
+    console.log("patientRegexp", patientRegexp)
+
+    if (dateTimes.length > 0) {
+        result = flatten(
+            (await Promise.all(dateTimes.map(d =>
                 docdb.aggregate({
                     db: CLINIC_DATABASE,
                     collection: `sparrow-clinic.external-examinations`,
@@ -120,9 +122,9 @@ const getPatients = async options => {
                             $match: {
                                 state: state,
                                 patientId: {
-                                    $regex: d._id
+                                    $regex: patientRegexp
                                 },
-                                "dateTime":{
+                                "dateTime": {
                                     $gt: d.dateTime
                                 }
                             }
@@ -134,9 +136,59 @@ const getPatients = async options => {
                         }
                     ]
                 })
-            )
-        ))
-    )
+            )))
+        )
+    } else {
+        result = await docdb.aggregate({
+            db: CLINIC_DATABASE,
+            collection: `sparrow-clinic.external-examinations`,
+            pipeline: [{
+                    $match: {
+                        state: state,
+                        patientId: {
+                            $regex: patientRegexp
+                        },
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0
+                    }
+                }
+            ]
+        })
+
+        console.log("First Added Patients", result)
+    }
+
+    console.log("Patients", result.map(d => d.patientId))
+
+    let existedPatients = await docdb.aggregate({
+        db: CLINIC_DATABASE,
+        collection: `sparrow-clinic.forms`,
+        pipeline: [{
+                $match: {
+                    "examination.patientId":{
+                        $in: result.map(d => d.patientId)
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    patientId: "$examination.patientId"
+                }
+            }
+        ]
+
+    })
+
+    existedPatients = existedPatients.map(d => d.patientId)
+    console.log("Already exists:", existedPatients)
+
+    result = result.filter( d => !existedPatients.includes(d.patientId))
+
+    console.log("ADDED PATIENTS:", result)
 
     return result
 }
@@ -167,9 +219,9 @@ const getExaminationForms = async examination => {
     // })
 
     form = {
-        patient: {},                                                                                                            
-        ekg: {},                                                                                                                
-        echo: {}, 
+        patient: {},
+        ekg: {},
+        echo: {},
         examination: {
             "id": examination.id,
             "dateTime": examination.dateTime,
@@ -177,7 +229,7 @@ const getExaminationForms = async examination => {
             "comment": examination.comment,
             "state": examination.state
         }
-    }    
+    }
 
     return form
 
@@ -217,16 +269,16 @@ const getExaminationAssets = async options => {
 
             // if (!metadata) {
 
-                await s3Bucket.uploadFromURL({
-                    source: f.url,
-                    target,
-                    callback: (progress) => {
-                        console.log(`UPLOAD ${target}: ${filesize(progress.loaded).human("jedec")} from ${filesize(progress.total).human("jedec")} (${(100*progress.loaded/progress.total).toFixed(1)}%)`)
-                    }
+            await s3Bucket.uploadFromURL({
+                source: f.url,
+                target,
+                callback: (progress) => {
+                    console.log(`UPLOAD ${target}: ${filesize(progress.loaded).human("jedec")} from ${filesize(progress.total).human("jedec")} (${(100*progress.loaded/progress.total).toFixed(1)}%)`)
+                }
 
-                })
+            })
 
-                metadata = await s3Bucket.metadata(target)
+            metadata = await s3Bucket.metadata(target)
             // }
 
             updtedAssets.push({

@@ -29,6 +29,12 @@ const getPatients = async options => {
 
     let { state, prefixes } = options
 
+    console.log(prefixes)
+    if(!prefixes || prefixes.length == 0) return []
+    prefixes = prefixes.filter( d => d)
+    if(prefixes.length == 0) return []
+        
+        
     let lastExamination = await docdb.aggregate({
         db: CLINIC_DATABASE,
         collection: "sparrow-clinic.external-examinations",

@@ -441,39 +441,42 @@ const syncExaminations = async (req, res) => {
             return
         }
 
+        console.log("grants.patientPrefix", grants.patientPrefix)
 
-
-        let toBeAdded = await dataService.getPatients({
-            state: "pending",
-            prefixes: grants.patientPrefix
-        })
-
-        console.log("----> ADD", toBeAdded.map(d => d.patientId))
-        let forms = []
+        if(grants.patientPrefix && grants.patientPrefix.filter(d =>d).length > 0) {
         
-        for( let exam of toBeAdded){
-           let form = await dataService.getExaminationForms(exam)
-           forms.push(form)     
-        }
-
-
-        if (forms.length > 0) {
-
-            let replaceCommands = forms.map( form => ({
-                replaceOne: {
-                    "filter": { 'examination.patientId': form.examination.patientId },
-                    "replacement": form,
-                    "upsert": true
-                }
-            }))
-
-            await docdb.bulkWrite({
-                db: CLINIC_DATABASE,
-                collection: `sparrow-clinic.forms`,
-                commands: replaceCommands
+            let toBeAdded = await dataService.getPatients({
+                state: "pending",
+                prefixes: grants.patientPrefix
             })
 
-        }
+            console.log("----> ADD", toBeAdded.map(d => d.patientId))
+            let forms = []
+            
+            for( let exam of toBeAdded){
+               let form = await dataService.getExaminationForms(exam)
+               forms.push(form)     
+            }
+
+
+            if (forms.length > 0) {
+
+                let replaceCommands = forms.map( form => ({
+                    replaceOne: {
+                        "filter": { 'examination.patientId': form.examination.patientId },
+                        "replacement": form,
+                        "upsert": true
+                    }
+                }))
+
+                await docdb.bulkWrite({
+                    db: CLINIC_DATABASE,
+                    collection: `sparrow-clinic.forms`,
+                    commands: replaceCommands
+                })
+
+            }
+        }    
 
         let patientRegexp = new RegExp((grants.patientPrefix || []).map(p => `^${p}`).join("|"))
 

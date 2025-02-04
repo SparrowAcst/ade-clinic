@@ -124,8 +124,20 @@ module.exports = {
         router.post("/cdm/accept-examinations/", [authorize, PRELOAD, adeClinicDataManagement.acceptExaminations])
         router.post("/cdm/reject-examinations/", [authorize, PRELOAD, adeClinicDataManagement.rejectExaminations])
 
+        //////////////////////////////////////////////////////////////////////////////////////
 
 
+        const segmentationRequest = require("./src/routes/segmentation-request")
+
+        // router.post("/open-request", [authorize, PRELOAD, segmentationRequest.openRequest])
+        router.post("/open-request", [segmentationRequest.openRequest])
+
+        router.get("/segmentation/", segmentationRequest.getRequest)
+        router.get("/segmentation/:requestId", segmentationRequest.getRequest)
+        router.post("/segmentation/", segmentationRequest.saveRequest)
+        router.post("/segmentation/:requestId", segmentationRequest.saveRequest)
+
+        ///////////////////////////////////////////////////////////////////////////////////////
 
         return router
     }

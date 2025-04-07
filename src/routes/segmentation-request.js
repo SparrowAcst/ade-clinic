@@ -30,13 +30,15 @@ const openRequest = (req, res) => {
                 "inconsistency": [],
                 "data": [{
                     "user": user,
-                    "readonly": true
+                    "readonly": true,
+                    "segmentation": []
                 }]
             }
         }
 
         CACHE.set(id, request)
-        console.log("keys",CACHE.keys())
+        // console.log("keys",CACHE.keys())
+        // console.log("CREATED REQUEST", id, CACHE.get(id))
         res.send({
             requiestId: id
         })
@@ -52,6 +54,12 @@ const getRequest = (req, res) => {
     try {
         
         let requestId = req.query.requestId || req.params.requestId || (req.body && req.body.requestId)
+        console.log("requestId", requestId)
+        
+        // CACHE.keys().forEach( k => {
+        //     console.log("CACHED REQUEST", k, CACHE.get(k))
+        // })
+
         if( CACHE.has(requestId)){
             let result = CACHE.get(requestId)
             res.send(result.data)

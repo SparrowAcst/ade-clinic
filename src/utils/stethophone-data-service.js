@@ -55,7 +55,7 @@ const getPatients = async options => {
     })
 
     let lastDate = (lastExamination[0]) ? lastExamination[0].dateTime : undefined
-    // console.log(lastDate)
+    console.log("lastDate", lastDate)
     let result
 
     if (lastDate) {
@@ -70,6 +70,8 @@ const getPatients = async options => {
         result = await fb.getCollectionItems("examinations")
 
     }
+
+    console.log("FROM FB", result)
 
     console.log(`Add ${result.length} items into sparrow-clinic.external-examinations`)
 
@@ -115,7 +117,7 @@ const getPatients = async options => {
         ]
     })
 
-    console.log(dateTimes)
+    console.log("dateTimes", dateTimes)
     console.log("patientRegexp", patientRegexp)
 
     if (dateTimes.length > 0) {
